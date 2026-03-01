@@ -13,4 +13,5 @@ main :: proc() {
 	defer ren.delete_window(window)
 	// renderer
 	ren.create_renderer(u32(vw), u32(vh), window)
+	ren.main_loop(window)
 }

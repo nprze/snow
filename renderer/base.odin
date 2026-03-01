@@ -4,31 +4,33 @@ import "core:fmt"
 import "core:mem"
 import "core:sys/windows"
 import d3d12 "vendor:directx/d3d12"
-import d3dc "vendor:directx/d3d_compiler"
 import dxgi "vendor:directx/dxgi"
 import glfw "vendor:glfw"
 
 RENDERTARGETS_COUNT :: 2
 
-Renderer :: struct {
-	displayWidth:       u32,
-	displayHeight:      u32,
-	windowHandle:       glfw.WindowHandle,
-	factory:            ^dxgi.IFactory4,
-	adapter:            ^dxgi.IAdapter1,
-	device:             ^d3d12.IDevice,
-	queue:              ^d3d12.ICommandQueue,
-	swapchain:          ^dxgi.ISwapChain3,
-	commandAllocator:   ^d3d12.ICommandAllocator,
-	commandList:        ^d3d12.IGraphicsCommandList,
-	pipeline:           ^d3d12.IPipelineState,
-	rootSignature:      ^d3d12.IRootSignature,
+Fence :: struct {
 	fenceValue:         u64,
 	frameFinishedFence: ^d3d12.IFence,
 	fenceEvent:         windows.HANDLE,
-	renderTargets:      [RENDERTARGETS_COUNT]^d3d12.IResource,
-	descriptorHeap:     ^d3d12.IDescriptorHeap,
-	vertexBufferView:   d3d12.VERTEX_BUFFER_VIEW,
+}
+
+Renderer :: struct {
+	displayWidth:        u32,
+	displayHeight:       u32,
+	windowHandle:        glfw.WindowHandle,
+	factory:             ^dxgi.IFactory4,
+	adapter:             ^dxgi.IAdapter1,
+	device:              ^d3d12.IDevice,
+	queue:               ^d3d12.ICommandQueue,
+	swapchain:           ^dxgi.ISwapChain3,
+	commandAllocator:    ^d3d12.ICommandAllocator,
+	commandList:         ^d3d12.IGraphicsCommandList,
+	pipeline:            ^d3d12.IPipelineState,
+	rootSignature:       ^d3d12.IRootSignature,
+	renderTargets:       [RENDERTARGETS_COUNT]^d3d12.IResource,
+	descriptorHeap:      ^d3d12.IDescriptorHeap,
+	renderFinishedFence: Fence,
 }
 
 renderer: Renderer
@@ -42,166 +44,41 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_device()
 	create_queue()
 	create_swap_chain()
-	// Descripors
-
-	hr: d3d12.HRESULT
-
-	{
-		desc := d3d12.DESCRIPTOR_HEAP_DESC {
-			NumDescriptors = RENDERTARGETS_COUNT,
-			Type           = .RTV,
-			Flags          = {},
-		}
-
-		hr = renderer.device->CreateDescriptorHeap(
-			&desc,
-			d3d12.IDescriptorHeap_UUID,
-			(^rawptr)(&renderer.descriptorHeap),
-		)
-		check(hr, "Failed creating descriptor heap")
-	}
-
-	// Fetch render targets
-
-	{
-		rtv_descriptor_size: u32 = renderer.device->GetDescriptorHandleIncrementSize(.RTV)
-
-		rtv_descriptor_handle: d3d12.CPU_DESCRIPTOR_HANDLE
-		renderer.descriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_descriptor_handle)
-
-		for i: u32 = 0; i < RENDERTARGETS_COUNT; i += 1 {
-			hr = renderer.swapchain->GetBuffer(
-				i,
-				d3d12.IResource_UUID,
-				(^rawptr)(&renderer.renderTargets[i]),
-			)
-			check(hr, "Failed getting render target")
-			renderer.device->CreateRenderTargetView(
-				renderer.renderTargets[i],
-				nil,
-				rtv_descriptor_handle,
-			)
-			rtv_descriptor_handle.ptr += uint(rtv_descriptor_size)
-		}
-	}
-
-	// The command allocator is used to create the commandlist that is used to tell the GPU what to draw
-	hr = renderer.device->CreateCommandAllocator(
-		.DIRECT,
-		d3d12.ICommandAllocator_UUID,
-		(^rawptr)(&renderer.commandAllocator),
-	)
-	check(hr, "Failed creating command allocator")
-
+	create_descriptor_heap()
+	descHandle: d3d12.CPU_DESCRIPTOR_HANDLE = fetch_render_targets()
+	create_command_allocator()
 	create_root_signature()
 	create_pipeline()
+	create_command_list()
+	initialize_vbuffer(&basicTrigBuffer, 1024)
 
-	// Create the commandlist that is reused further down.
-	hr = renderer.device->CreateCommandList(
+
+	vertices := [?]f32 {
+		0.0,
+		0.5,
+		0.0,
+		1,
 		0,
-		.DIRECT,
-		renderer.commandAllocator,
-		renderer.pipeline,
-		d3d12.ICommandList_UUID,
-		(^rawptr)(&renderer.commandList),
-	)
-	check(hr, "Failed to create command list")
-	hr = renderer.commandList->Close()
-	check(hr, "Failed to close command list")
-
-	vertex_buffer: ^d3d12.IResource
-
-	{
-		// The position and color data for the triangle's vertices go together per-vertex
-		vertices := [?]f32 {
-			// pos            color
-			0.0,
-			0.5,
-			0.0,
-			1,
-			0,
-			0,
-			0,
-			0.5,
-			-0.5,
-			0.0,
-			0,
-			1,
-			0,
-			0,
-			-0.5,
-			-0.5,
-			0.0,
-			0,
-			0,
-			1,
-			0,
-		}
-
-		heap_props := d3d12.HEAP_PROPERTIES {
-			Type = .UPLOAD,
-		}
-
-		vertex_buffer_size := len(vertices) * size_of(vertices[0])
-
-		resource_desc := d3d12.RESOURCE_DESC {
-			Dimension = .BUFFER,
-			Alignment = 0,
-			Width = u64(vertex_buffer_size),
-			Height = 1,
-			DepthOrArraySize = 1,
-			MipLevels = 1,
-			Format = .UNKNOWN,
-			SampleDesc = {Count = 1, Quality = 0},
-			Layout = .ROW_MAJOR,
-			Flags = {},
-		}
-
-		hr = renderer.device->CreateCommittedResource(
-			&heap_props,
-			{},
-			&resource_desc,
-			d3d12.RESOURCE_STATE_GENERIC_READ,
-			nil,
-			d3d12.IResource_UUID,
-			(^rawptr)(&vertex_buffer),
-		)
-		check(hr, "Failed creating vertex buffer")
-
-		gpu_data: rawptr
-		read_range: d3d12.RANGE
-
-		hr = vertex_buffer->Map(0, &read_range, &gpu_data)
-		check(hr, "Failed creating verex buffer resource")
-
-		mem.copy(gpu_data, &vertices[0], vertex_buffer_size)
-		vertex_buffer->Unmap(0, nil)
-
-		renderer.vertexBufferView = d3d12.VERTEX_BUFFER_VIEW {
-			BufferLocation = vertex_buffer->GetGPUVirtualAddress(),
-			StrideInBytes  = u32(vertex_buffer_size / 3),
-			SizeInBytes    = u32(vertex_buffer_size),
-		}
+		0,
+		0,
+		0.5,
+		-0.5,
+		0.0,
+		0,
+		1,
+		0,
+		0,
+		-0.5,
+		-0.5,
+		0.0,
+		0,
+		0,
+		1,
+		0,
 	}
 
-	{
-		hr = renderer.device->CreateFence(
-			renderer.fenceValue,
-			{},
-			d3d12.IFence_UUID,
-			(^rawptr)(&renderer.frameFinishedFence),
-		)
-		check(hr, "Failed to create fence")
-		renderer.fenceValue += 1
-		manual_reset: windows.BOOL = false
-		initial_state: windows.BOOL = false
-		renderer.fenceEvent = windows.CreateEventW(nil, manual_reset, initial_state, nil)
-		if renderer.fenceEvent == nil {
-			fmt.println("Failed to create fence event")
-			return
-		}
-	}
-	main_loop(window)
+
+	create_fence()
 }
 
 main_loop :: proc(window: glfw.WindowHandle) {
@@ -264,7 +141,7 @@ main_loop :: proc(window: glfw.WindowHandle) {
 
 		// draw call
 		renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
-		renderer.commandList->IASetVertexBuffers(0, 1, &renderer.vertexBufferView)
+		renderer.commandList->IASetVertexBuffers(0, 1, &basicTrigBuffer.dBufferView)
 		renderer.commandList->DrawInstanced(3, 1, 0, 0)
 
 		to_present_barrier := to_render_target_barrier
@@ -290,21 +167,27 @@ main_loop :: proc(window: glfw.WindowHandle) {
 
 		// wait for frame to finish
 		{
-			current_fence_value := renderer.fenceValue
+			current_fence_value := renderer.renderFinishedFence.fenceValue
 
-			hr = renderer.queue->Signal(renderer.frameFinishedFence, current_fence_value)
+			hr = renderer.queue->Signal(
+				renderer.renderFinishedFence.frameFinishedFence,
+				current_fence_value,
+			)
 			check(hr, "Failed to signal fence")
 
-			renderer.fenceValue += 1
-			completed := renderer.frameFinishedFence->GetCompletedValue()
+			renderer.renderFinishedFence.fenceValue += 1
+			completed := renderer.renderFinishedFence.frameFinishedFence->GetCompletedValue()
 
 			if completed < current_fence_value {
-				hr = renderer.frameFinishedFence->SetEventOnCompletion(
+				hr = renderer.renderFinishedFence.frameFinishedFence->SetEventOnCompletion(
 					current_fence_value,
-					renderer.fenceEvent,
+					renderer.renderFinishedFence.fenceEvent,
 				)
 				check(hr, "Failed to set event on completion flag")
-				windows.WaitForSingleObject(renderer.fenceEvent, windows.INFINITE)
+				windows.WaitForSingleObject(
+					renderer.renderFinishedFence.fenceEvent,
+					windows.INFINITE,
+				)
 			}
 
 			frame_index = renderer.swapchain->GetCurrentBackBufferIndex()
@@ -427,4 +310,91 @@ create_swap_chain :: proc() -> ^dxgi.ISwapChain3 {
 	check(hr, "Failed to create swap chain")
 
 	return renderer.swapchain
+}
+create_descriptor_heap :: proc() -> ^d3d12.IDescriptorHeap {
+	hr: d3d12.HRESULT
+	desc := d3d12.DESCRIPTOR_HEAP_DESC {
+		NumDescriptors = RENDERTARGETS_COUNT,
+		Type           = .RTV,
+		Flags          = {},
+	}
+
+	hr = renderer.device->CreateDescriptorHeap(
+		&desc,
+		d3d12.IDescriptorHeap_UUID,
+		(^rawptr)(&renderer.descriptorHeap),
+	)
+	check(hr, "Failed creating descriptor heap")
+	return renderer.descriptorHeap
+}
+fetch_render_targets :: proc() -> d3d12.CPU_DESCRIPTOR_HANDLE {
+	hr: d3d12.HRESULT
+	rtv_descriptor_size: u32 = renderer.device->GetDescriptorHandleIncrementSize(.RTV)
+
+	rtv_descriptor_handle: d3d12.CPU_DESCRIPTOR_HANDLE
+	renderer.descriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_descriptor_handle)
+
+	for i: u32 = 0; i < RENDERTARGETS_COUNT; i += 1 {
+		hr = renderer.swapchain->GetBuffer(
+			i,
+			d3d12.IResource_UUID,
+			(^rawptr)(&renderer.renderTargets[i]),
+		)
+		check(hr, "Failed getting render target")
+		renderer.device->CreateRenderTargetView(
+			renderer.renderTargets[i],
+			nil,
+			rtv_descriptor_handle,
+		)
+		rtv_descriptor_handle.ptr += uint(rtv_descriptor_size)
+	}
+	return rtv_descriptor_handle
+}
+create_command_allocator :: proc() -> ^d3d12.ICommandAllocator {
+	hr: d3d12.HRESULT
+	hr = renderer.device->CreateCommandAllocator(
+		.DIRECT,
+		d3d12.ICommandAllocator_UUID,
+		(^rawptr)(&renderer.commandAllocator),
+	)
+	check(hr, "Failed creating command allocator")
+	return renderer.commandAllocator
+}
+create_command_list :: proc() -> ^d3d12.IGraphicsCommandList {
+	hr: d3d12.HRESULT
+	hr = renderer.device->CreateCommandList(
+		0,
+		.DIRECT,
+		renderer.commandAllocator,
+		renderer.pipeline,
+		d3d12.ICommandList_UUID,
+		(^rawptr)(&renderer.commandList),
+	)
+	check(hr, "Failed to create command list")
+	hr = renderer.commandList->Close()
+	check(hr, "Failed to close command list")
+	return renderer.commandList
+}
+create_fence :: proc() -> Fence {
+	hr: d3d12.HRESULT
+	hr = renderer.device->CreateFence(
+		renderer.renderFinishedFence.fenceValue,
+		{},
+		d3d12.IFence_UUID,
+		(^rawptr)(&renderer.renderFinishedFence.frameFinishedFence),
+	)
+	check(hr, "Failed to create fence")
+	renderer.renderFinishedFence.fenceValue += 1
+	manual_reset: windows.BOOL = false
+	initial_state: windows.BOOL = false
+	renderer.renderFinishedFence.fenceEvent = windows.CreateEventW(
+		nil,
+		manual_reset,
+		initial_state,
+		nil,
+	)
+	if renderer.renderFinishedFence.fenceEvent == nil {
+		panic("Failed to create fence event")
+	}
+	return renderer.renderFinishedFence
 }

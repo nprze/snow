@@ -81,7 +81,6 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 	)
 	check(hr, "Failed to compile pixel shader")
 
-	// This layout matches the vertices data defined further down
 	vertex_format: []d3d12.INPUT_ELEMENT_DESC = {
 		{SemanticName = "POSITION", Format = .R32G32B32_FLOAT, InputSlotClass = .PER_VERTEX_DATA},
 		{
