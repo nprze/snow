@@ -1,18 +1,18 @@
 package renderer
 
 import "core:fmt"
-import "core:mem"
 import "core:sys/windows"
 import d3d12 "vendor:directx/d3d12"
 import dxgi "vendor:directx/dxgi"
 import glfw "vendor:glfw"
+import mu "vendor:microui"
 
 RENDERTARGETS_COUNT :: 2
 
 Fence :: struct {
-	fenceValue:         u64,
-	frameFinishedFence: ^d3d12.IFence,
-	fenceEvent:         windows.HANDLE,
+	fenceValue: u64,
+	dFence:     ^d3d12.IFence,
+	fenceEvent: windows.HANDLE,
 }
 
 Renderer :: struct {
@@ -25,7 +25,7 @@ Renderer :: struct {
 	queue:               ^d3d12.ICommandQueue,
 	swapchain:           ^dxgi.ISwapChain3,
 	commandAllocator:    ^d3d12.ICommandAllocator,
-	commandList:         ^d3d12.IGraphicsCommandList,
+	worldCommandList:    ^d3d12.IGraphicsCommandList,
 	pipeline:            ^d3d12.IPipelineState,
 	rootSignature:       ^d3d12.IRootSignature,
 	renderTargets:       [RENDERTARGETS_COUNT]^d3d12.IResource,
@@ -34,8 +34,10 @@ Renderer :: struct {
 }
 
 renderer: Renderer
+muContext: mu.Context
 
 create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
+	// general
 	renderer.windowHandle = window
 	renderer.displayWidth = width
 	renderer.displayHeight = height
@@ -44,41 +46,17 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_device()
 	create_queue()
 	create_swap_chain()
-	create_descriptor_heap()
+	create_rtv_descriptor_heap()
 	descHandle: d3d12.CPU_DESCRIPTOR_HANDLE = fetch_render_targets()
 	create_command_allocator()
+	create_fence(&renderer.renderFinishedFence)
+	// world pipeline specific
 	create_root_signature()
 	create_pipeline()
-	create_command_list()
-	initialize_vbuffer(&basicTrigBuffer, 1024)
-
-
-	vertices := [?]f32 {
-		0.0,
-		0.5,
-		0.0,
-		1,
-		0,
-		0,
-		0,
-		0.5,
-		-0.5,
-		0.0,
-		0,
-		1,
-		0,
-		0,
-		-0.5,
-		-0.5,
-		0.0,
-		0,
-		0,
-		1,
-		0,
-	}
-
-
-	create_fence()
+	create_command_list(&renderer.worldCommandList)
+	initialize_vbuffer(&basicTrigBuffer, size_of(BasicVertex) * 3)
+	// ui specific
+	mu_init()
 }
 
 main_loop :: proc(window: glfw.WindowHandle) {
@@ -91,7 +69,7 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		hr = renderer.commandAllocator->Reset()
 		check(hr, "Failed resetting command allocator")
 
-		hr = renderer.commandList->Reset(renderer.commandAllocator, renderer.pipeline)
+		hr = renderer.worldCommandList->Reset(renderer.commandAllocator, renderer.pipeline)
 		check(hr, "Failed to reset command list")
 
 		viewport := d3d12.VIEWPORT {
@@ -107,9 +85,9 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		}
 
 		// This state is reset everytime the cmd list is reset, so we need to rebind it
-		renderer.commandList->SetGraphicsRootSignature(renderer.rootSignature)
-		renderer.commandList->RSSetViewports(1, &viewport)
-		renderer.commandList->RSSetScissorRects(1, &scissor_rect)
+		renderer.worldCommandList->SetGraphicsRootSignature(renderer.rootSignature)
+		renderer.worldCommandList->RSSetViewports(1, &viewport)
+		renderer.worldCommandList->RSSetScissorRects(1, &scissor_rect)
 
 		to_render_target_barrier := d3d12.RESOURCE_BARRIER {
 			Type  = .TRANSITION,
@@ -123,7 +101,7 @@ main_loop :: proc(window: glfw.WindowHandle) {
 			Subresource = d3d12.RESOURCE_BARRIER_ALL_SUBRESOURCES,
 		}
 
-		renderer.commandList->ResourceBarrier(1, &to_render_target_barrier)
+		renderer.worldCommandList->ResourceBarrier(1, &to_render_target_barrier)
 
 		rtv_handle: d3d12.CPU_DESCRIPTOR_HANDLE
 		renderer.descriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_handle)
@@ -133,28 +111,28 @@ main_loop :: proc(window: glfw.WindowHandle) {
 			rtv_handle.ptr += uint(frame_index * s)
 		}
 
-		renderer.commandList->OMSetRenderTargets(1, &rtv_handle, false, nil)
+		renderer.worldCommandList->OMSetRenderTargets(1, &rtv_handle, false, nil)
 
 		// clear backbuffer
 		clearcolor := [?]f32{0.05, 0.05, 0.05, 1.0}
-		renderer.commandList->ClearRenderTargetView(rtv_handle, &clearcolor, 0, nil)
+		renderer.worldCommandList->ClearRenderTargetView(rtv_handle, &clearcolor, 0, nil)
 
 		// draw call
-		renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
-		renderer.commandList->IASetVertexBuffers(0, 1, &basicTrigBuffer.dBufferView)
-		renderer.commandList->DrawInstanced(3, 1, 0, 0)
+		renderer.worldCommandList->IASetPrimitiveTopology(.TRIANGLELIST)
+		renderer.worldCommandList->IASetVertexBuffers(0, 1, &basicTrigBuffer.dBufferView)
+		renderer.worldCommandList->DrawInstanced(3, 1, 0, 0)
 
 		to_present_barrier := to_render_target_barrier
 		to_present_barrier.Transition.StateBefore = {.RENDER_TARGET}
 		to_present_barrier.Transition.StateAfter = d3d12.RESOURCE_STATE_PRESENT
 
-		renderer.commandList->ResourceBarrier(1, &to_present_barrier)
+		renderer.worldCommandList->ResourceBarrier(1, &to_present_barrier)
 
-		hr = renderer.commandList->Close()
+		hr = renderer.worldCommandList->Close()
 		check(hr, "Failed to close command list")
 
 		// execute
-		cmdlists := [?]^d3d12.IGraphicsCommandList{renderer.commandList}
+		cmdlists := [?]^d3d12.IGraphicsCommandList{renderer.worldCommandList}
 		renderer.queue->ExecuteCommandLists(len(cmdlists), (^^d3d12.ICommandList)(&cmdlists[0]))
 
 		// present
@@ -169,17 +147,14 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		{
 			current_fence_value := renderer.renderFinishedFence.fenceValue
 
-			hr = renderer.queue->Signal(
-				renderer.renderFinishedFence.frameFinishedFence,
-				current_fence_value,
-			)
+			hr = renderer.queue->Signal(renderer.renderFinishedFence.dFence, current_fence_value)
 			check(hr, "Failed to signal fence")
 
 			renderer.renderFinishedFence.fenceValue += 1
-			completed := renderer.renderFinishedFence.frameFinishedFence->GetCompletedValue()
+			completed := renderer.renderFinishedFence.dFence->GetCompletedValue()
 
 			if completed < current_fence_value {
-				hr = renderer.renderFinishedFence.frameFinishedFence->SetEventOnCompletion(
+				hr = renderer.renderFinishedFence.dFence->SetEventOnCompletion(
 					current_fence_value,
 					renderer.renderFinishedFence.fenceEvent,
 				)
@@ -311,7 +286,7 @@ create_swap_chain :: proc() -> ^dxgi.ISwapChain3 {
 
 	return renderer.swapchain
 }
-create_descriptor_heap :: proc() -> ^d3d12.IDescriptorHeap {
+create_rtv_descriptor_heap :: proc() -> ^d3d12.IDescriptorHeap {
 	hr: d3d12.HRESULT
 	desc := d3d12.DESCRIPTOR_HEAP_DESC {
 		NumDescriptors = RENDERTARGETS_COUNT,
@@ -360,41 +335,21 @@ create_command_allocator :: proc() -> ^d3d12.ICommandAllocator {
 	check(hr, "Failed creating command allocator")
 	return renderer.commandAllocator
 }
-create_command_list :: proc() -> ^d3d12.IGraphicsCommandList {
-	hr: d3d12.HRESULT
-	hr = renderer.device->CreateCommandList(
-		0,
-		.DIRECT,
-		renderer.commandAllocator,
-		renderer.pipeline,
-		d3d12.ICommandList_UUID,
-		(^rawptr)(&renderer.commandList),
-	)
-	check(hr, "Failed to create command list")
-	hr = renderer.commandList->Close()
-	check(hr, "Failed to close command list")
-	return renderer.commandList
-}
-create_fence :: proc() -> Fence {
+create_fence :: proc(fenceOut: ^Fence) -> ^Fence {
 	hr: d3d12.HRESULT
 	hr = renderer.device->CreateFence(
-		renderer.renderFinishedFence.fenceValue,
+		fenceOut.fenceValue,
 		{},
 		d3d12.IFence_UUID,
-		(^rawptr)(&renderer.renderFinishedFence.frameFinishedFence),
+		(^rawptr)(&fenceOut.dFence),
 	)
 	check(hr, "Failed to create fence")
-	renderer.renderFinishedFence.fenceValue += 1
+	fenceOut.fenceValue += 1
 	manual_reset: windows.BOOL = false
 	initial_state: windows.BOOL = false
-	renderer.renderFinishedFence.fenceEvent = windows.CreateEventW(
-		nil,
-		manual_reset,
-		initial_state,
-		nil,
-	)
-	if renderer.renderFinishedFence.fenceEvent == nil {
+	fenceOut.fenceEvent = windows.CreateEventW(nil, manual_reset, initial_state, nil)
+	if fenceOut.fenceEvent == nil {
 		panic("Failed to create fence event")
 	}
-	return renderer.renderFinishedFence
+	return fenceOut
 }

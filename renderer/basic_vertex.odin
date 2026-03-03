@@ -2,10 +2,22 @@ package renderer
 import "core:math"
 import "core:mem"
 
+Vec2 :: struct {
+	x: f32,
+	y: f32,
+}
+
 Vec3 :: struct {
 	x: f32,
 	y: f32,
 	z: f32,
+}
+
+Vec4 :: struct {
+	x: f32,
+	y: f32,
+	z: f32,
+	w: f32,
 }
 
 BasicVertex :: struct {

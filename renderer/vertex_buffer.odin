@@ -12,8 +12,6 @@ VertexBuffer :: struct {
 	maxVertexCount: int,
 }
 
-basicTrigBuffer: VertexBuffer
-
 initialize_vbuffer :: proc(buffer: ^VertexBuffer, sizeBytes: int) { 	// will round sizeBytes down to the nearest multiple of the vertex size
 	hr: d3d12.HRESULT
 
@@ -69,10 +67,18 @@ initialize_vbuffer :: proc(buffer: ^VertexBuffer, sizeBytes: int) { 	// will rou
 add_vertices :: proc(buffer: ^VertexBuffer, vertices: []BasicVertex) {
 	write(buffer, vertices)
 }
+add_vertices_ui :: proc(buffer: ^VertexBuffer, vertices: []UiVertex) {
+	write_ui(buffer, vertices)
+}
 
 write :: proc(buffer: ^VertexBuffer, vertices: []BasicVertex) {
 	assert(buffer.vertexCount + len(vertices) <= buffer.maxVertexCount)
 	mem.copy(buffer.mappedData, rawptr(&vertices[0]), size_of(BasicVertex) * len(vertices))
+	buffer.vertexCount += len(vertices)
+}
+write_ui :: proc(buffer: ^VertexBuffer, vertices: []UiVertex) {
+	assert(buffer.vertexCount + len(vertices) <= buffer.maxVertexCount)
+	mem.copy(buffer.mappedData, rawptr(&vertices[0]), size_of(UiVertex) * len(vertices))
 	buffer.vertexCount += len(vertices)
 }
 

@@ -2,3 +2,4 @@
 *.pdb
 *.rdi
 raddbg.txt
+.vscode/

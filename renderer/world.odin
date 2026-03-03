@@ -4,6 +4,8 @@ import os "core:os"
 import d3d12 "vendor:directx/d3d12"
 import d3dc "vendor:directx/d3d_compiler"
 
+basicTrigBuffer: VertexBuffer
+
 read_file :: proc(path: string) -> cstring {
 	data_slice, ok := os.read_entire_file(path)
 	if !ok {
@@ -151,4 +153,21 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 	ps->Release()
 
 	return renderer.pipeline
+}
+create_command_list :: proc(
+	commandListOut: ^^d3d12.IGraphicsCommandList,
+) -> ^^d3d12.IGraphicsCommandList {
+	hr: d3d12.HRESULT
+	hr = renderer.device->CreateCommandList(
+		0,
+		.DIRECT,
+		renderer.commandAllocator,
+		renderer.pipeline,
+		d3d12.ICommandList_UUID,
+		(^rawptr)(commandListOut),
+	)
+	check(hr, "Failed to create command list")
+	hr = (commandListOut^)->Close()
+	check(hr, "Failed to close command list")
+	return commandListOut
 }
