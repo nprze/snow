@@ -1,5 +1,6 @@
 package renderer
 
+import fmt "core:fmt"
 import "core:math"
 import "core:mem"
 import d3d12 "vendor:directx/d3d12"
@@ -12,7 +13,7 @@ VertexBuffer :: struct {
 	maxVertexCount: int,
 }
 
-initialize_vbuffer :: proc(buffer: ^VertexBuffer, sizeBytes: int) { 	// will round sizeBytes down to the nearest multiple of the vertex size
+initialize_vbuffer :: proc(buffer: ^VertexBuffer, vertexCount: int, oneVertexSize: int) { 	// will round sizeBytes down to the nearest multiple of the vertex size
 	hr: d3d12.HRESULT
 
 
@@ -20,13 +21,13 @@ initialize_vbuffer :: proc(buffer: ^VertexBuffer, sizeBytes: int) { 	// will rou
 		Type = .UPLOAD,
 	}
 
-	buffer.maxVertexCount = int(math.floor(f32(sizeBytes) / f32(size_of(BasicVertex))))
-	bufferSizeBytes: int = buffer.maxVertexCount * size_of(BasicVertex)
+	buffer.maxVertexCount = vertexCount
+	bufferSizeBytes: int = buffer.maxVertexCount * oneVertexSize
 
 	resource_desc := d3d12.RESOURCE_DESC {
 		Dimension = .BUFFER,
 		Alignment = 0,
-		Width = u64(sizeBytes),
+		Width = u64(bufferSizeBytes),
 		Height = 1,
 		DepthOrArraySize = 1,
 		MipLevels = 1,
@@ -54,14 +55,6 @@ initialize_vbuffer :: proc(buffer: ^VertexBuffer, sizeBytes: int) { 	// will rou
 		StrideInBytes  = u32(size_of(BasicVertex)),
 		SizeInBytes    = u32(bufferSizeBytes),
 	}
-
-	vertices := [?]BasicVertex {
-		{{0.0, 0.5, 0.0}, {1, 0, 0}},
-		{{0.5, -0.5, 0.0}, {0, 1, 0}},
-		{{-0.5, -0.5, 0.0}, {0, 0, 1}},
-	}
-
-	add_vertices(buffer, vertices[:])
 }
 
 add_vertices :: proc(buffer: ^VertexBuffer, vertices: []BasicVertex) {
@@ -106,4 +99,7 @@ clean_vbuffer :: proc(buffer: ^VertexBuffer) {
 	buffer.mappedData = nil
 	buffer.vertexCount = 0
 	buffer.maxVertexCount = 0
+}
+reset_vbuffer :: proc(buffer: ^VertexBuffer) {
+	buffer.vertexCount = 0
 }
