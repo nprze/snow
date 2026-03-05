@@ -55,15 +55,19 @@ mu_init :: proc() {
 	)
 	check(hr, "Failed creating root signature")
 	serialized_desc->Release()
-
-	// PSO
+	// pso
 	vs: ^d3d12.IBlob = nil
 	ps: ^d3d12.IBlob = nil
 
 	compile_shaders("ui.hlsl", &vs, &ps)
 
 	vertex_format: []d3d12.INPUT_ELEMENT_DESC = {
-		{SemanticName = "POSITION", Format = .R32G32_FLOAT, InputSlotClass = .PER_VERTEX_DATA},
+		{
+			SemanticName = "POSITION",
+			Format = .R32G32_FLOAT,
+			AlignedByteOffset = 0,
+			InputSlotClass = .PER_VERTEX_DATA,
+		},
 		{
 			SemanticName = "COLOR",
 			Format = .R32G32B32A32_FLOAT,
@@ -75,13 +79,12 @@ mu_init :: proc() {
 	default_blend_state := d3d12.RENDER_TARGET_BLEND_DESC {
 		BlendEnable           = true,
 		LogicOpEnable         = false,
-		SrcBlend              = .ONE,
-		DestBlend             = .ZERO,
+		SrcBlend              = .SRC_ALPHA,
+		DestBlend             = .INV_SRC_ALPHA,
 		BlendOp               = .ADD,
 		SrcBlendAlpha         = .ONE,
-		DestBlendAlpha        = .ZERO,
+		DestBlendAlpha        = .INV_SRC_ALPHA,
 		BlendOpAlpha          = .ADD,
-		LogicOp               = .NOOP,
 		RenderTargetWriteMask = u8(d3d12.COLOR_WRITE_ENABLE_ALL),
 	}
 
@@ -126,11 +129,10 @@ mu_init :: proc() {
 		d3d12.IPipelineState_UUID,
 		(^rawptr)(&renderer.uiPipeline),
 	)
-	check(hr, "UI pipeline creation failed")
+	check(hr, "Pipeline creation failed")
 
 	vs->Release()
 	ps->Release()
-
 }
 mu_begin :: proc() {
 	mu.begin(&muContext)
@@ -140,6 +142,7 @@ mu_end :: proc() {
 	mu.end(&muContext)
 }
 mu_render :: proc() {
+	/*
 	command_backing: ^mu.Command
 	for variant in mu.next_command_iterator(&muContext, &command_backing) {
 		switch cmd in variant {
@@ -149,7 +152,7 @@ mu_render :: proc() {
 		case ^mu.Command_Text:
 		case ^mu.Command_Icon:
 		}
-	}
+	}*/
 
 	viewport := d3d12.VIEWPORT {
 		Width  = f32(renderer.displayWidth),
@@ -168,6 +171,7 @@ mu_render :: proc() {
 	renderer.commandList->SetGraphicsRootSignature(renderer.uiRootSignature)
 	renderer.commandList->SetPipelineState(renderer.uiPipeline)
 	renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
+
 	renderer.commandList->IASetVertexBuffers(0, 1, &uiVertexBuffer.dBufferView)
 	assert(uiVertexBuffer.vertexCount > 0)
 	renderer.commandList->DrawInstanced(u32(uiVertexBuffer.vertexCount), 1, 0, 0)
@@ -177,12 +181,21 @@ mu_render :: proc() {
 
 add_rect :: proc(area: Vec4, color: Vec4) {
 	vertices := [?]UiVertex {
-		{{-1, -1}, {1, 0, 0, 1}},
-		{{1, -1}, {0, 1, 0, 1}},
-		{{1, 1}, {0, 0, 1, 1}},
-		{{-1, -1}, {1, 0, 0, 1}},
-		{{1, 1}, {0, 0, 1, 1}},
-		{{-1, 1}, {1, 1, 0, 1}},
+		{{area.x + area.z, area.y + area.w}, color},
+		{{area.x + area.z, area.y}, color},
+		{{area.x, area.y}, color},
+		{{area.x, area.y}, color},
+		{{area.x, area.y + area.w}, color},
+		{{area.x + area.z, area.y + area.w}, color},
+		/*
+		proper order for fullscreen quad (cull mode back)
+		{{1.0, 1.0}, {1, 1, 1, 1}},
+		{{1.0, -1.0}, {1, 1, 1, 1}},
+		{{-1.0, -1.0}, {1, 1, 1, 1}},
+		{{-1.0, -1.0}, {1, 1, 1, 1}},
+		{{-1.0, 1.0}, {1, 1, 1, 1}},
+		{{1.0, 1.0}, {1, 1, 1, 1}},
+		*/
 	}
 	write_ui(&uiVertexBuffer, vertices[:])
 }

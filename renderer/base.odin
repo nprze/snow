@@ -78,14 +78,11 @@ main_loop :: proc(window: glfw.WindowHandle) {
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents()
 		mu_begin()
-		add_rect({0, 0, 0.5, 0.5}, {1, 1, 1, 1})
+		add_rect({0, 0, 0.5, 0.5}, {1, 1, 1, 0.5})
 		mu_end()
 		// render
 		hr = renderer.commandAllocator->Reset()
 		check(hr, "Failed resetting command allocator")
-
-		hr = renderer.commandList->Reset(renderer.commandAllocator, renderer.worldPipeline)
-		check(hr, "Failed to reset command list")
 
 		viewport := d3d12.VIEWPORT {
 			Width  = f32(renderer.displayWidth),
@@ -99,6 +96,8 @@ main_loop :: proc(window: glfw.WindowHandle) {
 			bottom = i32(renderer.displayHeight),
 		}
 
+		hr = renderer.commandList->Reset(renderer.commandAllocator, renderer.worldPipeline)
+		check(hr, "Failed to reset command list")
 		// This state is reset everytime the cmd list is reset, so we need to rebind it
 		renderer.commandList->SetGraphicsRootSignature(renderer.rootSignature)
 		renderer.commandList->RSSetViewports(1, &viewport)
