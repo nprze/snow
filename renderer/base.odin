@@ -2,6 +2,7 @@ package renderer
 
 import "core:fmt"
 import "core:sys/windows"
+import "core:text/table"
 import "core:unicode"
 import d3d12 "vendor:directx/d3d12"
 import d3dc "vendor:directx/d3d_compiler"
@@ -69,6 +70,8 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	add_vertices(&basicTrigBuffer, vertices[:])
 	// ui specific
 	mu_init()
+	tex: Texture
+	load_texture("renderer/fonts/consolas.png", &tex)
 }
 
 main_loop :: proc(window: glfw.WindowHandle) {
@@ -406,6 +409,14 @@ create_fence :: proc(fenceOut: ^Fence) -> ^Fence {
 		panic("Failed to create fence event")
 	}
 	return fenceOut
+}
+wait_for_fence :: proc(fence: ^Fence) {
+	hr: d3d12.HRESULT
+	if fence.dFence->GetCompletedValue() < fence.fenceValue {
+		hr = fence.dFence->SetEventOnCompletion(fence.fenceValue, fence.fenceEvent)
+		check(hr, "Failed to set event on completion flag")
+		windows.WaitForSingleObject(fence.fenceEvent, windows.INFINITE)
+	}
 }
 
 compile_shaders :: proc(path: string, vs: ^^d3d12.IBlob, ps: ^^d3d12.IBlob) { 	// don't forget to call release on blobs

@@ -12,6 +12,7 @@ oneOver255: f32 = 1.0 / 255.0
 UiVertex :: struct {
 	// include allignment padding here.
 	position: Vec2,
+	uv:       Vec2,
 	color:    Vec4,
 }
 
@@ -69,9 +70,15 @@ mu_init :: proc() {
 			InputSlotClass = .PER_VERTEX_DATA,
 		},
 		{
+			SemanticName = "TEXCOORD",
+			Format = .R32G32_FLOAT,
+			AlignedByteOffset = size_of(Vec2),
+			InputSlotClass = .PER_VERTEX_DATA,
+		},
+		{
 			SemanticName = "COLOR",
 			Format = .R32G32B32A32_FLOAT,
-			AlignedByteOffset = size_of(f32) * 2,
+			AlignedByteOffset = size_of(Vec2) * 2,
 			InputSlotClass = .PER_VERTEX_DATA,
 		},
 	}
@@ -181,12 +188,13 @@ mu_render :: proc() {
 
 add_rect :: proc(area: Vec4, color: Vec4) {
 	vertices := [?]UiVertex {
-		{{area.x + area.z, area.y + area.w}, color},
-		{{area.x + area.z, area.y}, color},
-		{{area.x, area.y}, color},
-		{{area.x, area.y}, color},
-		{{area.x, area.y + area.w}, color},
-		{{area.x + area.z, area.y + area.w}, color},
+		{{area.x + area.z, area.y + area.w}, {1.0, 1.0}, color},
+		{{area.x + area.z, area.y}, {1.0, 1.0}, color},
+		{{area.x, area.y}, {1.0, 1.0}, color},
+		{{area.x, area.y}, {1.0, 1.0}, color},
+		{{area.x, area.y + area.w}, {1.0, 1.0}, color},
+		{{area.x + area.z, area.y + area.w}, {1.0, 1.0}, color},
+
 		/*
 		proper order for fullscreen quad (cull mode back)
 		{{1.0, 1.0}, {1, 1, 1, 1}},

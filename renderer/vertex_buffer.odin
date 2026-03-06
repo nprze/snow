@@ -1,7 +1,5 @@
 package renderer
 
-import fmt "core:fmt"
-import "core:math"
 import "core:mem"
 import d3d12 "vendor:directx/d3d12"
 
@@ -15,7 +13,6 @@ VertexBuffer :: struct {
 
 initialize_vbuffer :: proc(buffer: ^VertexBuffer, vertexCount: int, oneVertexSize: int) { 	// will round sizeBytes down to the nearest multiple of the vertex size
 	hr: d3d12.HRESULT
-
 
 	heap_props := d3d12.HEAP_PROPERTIES {
 		Type = .UPLOAD,
@@ -52,7 +49,7 @@ initialize_vbuffer :: proc(buffer: ^VertexBuffer, vertexCount: int, oneVertexSiz
 
 	buffer.dBufferView = d3d12.VERTEX_BUFFER_VIEW {
 		BufferLocation = buffer.dBuffer->GetGPUVirtualAddress(),
-		StrideInBytes  = u32(size_of(BasicVertex)),
+		StrideInBytes  = u32(oneVertexSize),
 		SizeInBytes    = u32(bufferSizeBytes),
 	}
 }
