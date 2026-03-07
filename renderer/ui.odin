@@ -47,7 +47,7 @@ ui_init :: proc() {
 	srv_range := d3d12.DESCRIPTOR_RANGE {
 		RangeType                         = .SRV,
 		NumDescriptors                    = 1,
-		BaseShaderRegister                = 0, // t0
+		BaseShaderRegister                = 0,
 		RegisterSpace                     = 0,
 		OffsetInDescriptorsFromTableStart = 0,
 	}
@@ -55,7 +55,7 @@ ui_init :: proc() {
 	sampler_range := d3d12.DESCRIPTOR_RANGE {
 		RangeType                         = .SAMPLER,
 		NumDescriptors                    = 1,
-		BaseShaderRegister                = 0, // s0
+		BaseShaderRegister                = 0,
 		RegisterSpace                     = 0,
 		OffsetInDescriptorsFromTableStart = 0,
 	}
@@ -230,6 +230,14 @@ ui_render :: proc() {
 
 	heaps := [?]^d3d12.IDescriptorHeap{srvHeap, samplerHeap}
 
+	srv_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
+	sampler_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
+
+	srvHeap.GetGPUDescriptorHandleForHeapStart(srvHeap, &srv_gpu)
+	samplerHeap.GetGPUDescriptorHandleForHeapStart(samplerHeap, &sampler_gpu)
+
+	renderer.commandList->SetGraphicsRootDescriptorTable(0, srv_gpu)
+	renderer.commandList->SetGraphicsRootDescriptorTable(1, sampler_gpu)
 	renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])
 
 	renderer.commandList->IASetVertexBuffers(0, 1, &uiVertexBuffer.dBufferView)
@@ -241,12 +249,12 @@ ui_render :: proc() {
 
 add_rect :: proc(area: Vec4, color: Vec4) {
 	vertices := [?]UiVertex {
-		{{area.x + area.z, area.y + area.w}, {1.0, 1.0}, color},
-		{{area.x + area.z, area.y}, {1.0, 0.0}, color},
-		{{area.x, area.y}, {0.0, 0.0}, color},
-		{{area.x, area.y}, {0.0, 0.0}, color},
-		{{area.x, area.y + area.w}, {0.0, 1.0}, color},
-		{{area.x + area.z, area.y + area.w}, {1.0, 1.0}, color},
+		{{area.x + area.z, area.y + area.w}, {0.0, 0.0}, color},
+		{{area.x + area.z, area.y}, {0.0, 1.0}, color},
+		{{area.x, area.y}, {1.0, 1.0}, color},
+		{{area.x, area.y}, {1.0, 1.0}, color},
+		{{area.x, area.y + area.w}, {1.0, 0.0}, color},
+		{{area.x + area.z, area.y + area.w}, {0.0, 0.0}, color},
 
 		/*
 		proper order for fullscreen quad (cull mode back)

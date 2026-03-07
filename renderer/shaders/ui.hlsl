@@ -15,5 +15,6 @@ PSInput VSMain(float2 position : POSITION0, float2 uv : TEXCOORD0, float4 color 
 Texture2D tex : register(t0);
 SamplerState samp : register(s0);
 float4 PSMain(PSInput input) : SV_TARGET {
-    return input.color * tex.Sample(samp, input.uv);
+    float4 sampled = tex.Sample(samp, input.uv);
+    return input.color * sampled;
 };

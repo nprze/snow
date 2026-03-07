@@ -48,6 +48,7 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	renderer.windowHandle = window
 	renderer.displayWidth = width
 	renderer.displayHeight = height
+	create_debug()
 	create_dxgi_factory()
 	create_adapter()
 	create_device()
@@ -81,7 +82,7 @@ main_loop :: proc(window: glfw.WindowHandle) {
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents()
 		ui_begin()
-		add_rect({0, 0, 0.5, 0.5}, {1, 1, 1, 0.5})
+		add_rect({0, 0, 0.5, 0.5}, {1, 1, 1, 1.0})
 		ui_end()
 		// render
 		hr = renderer.commandAllocator->Reset()
@@ -244,7 +245,7 @@ create_dxgi_factory :: proc() -> ^dxgi.IFactory4 {
 }
 create_adapter :: proc() -> ^dxgi.IAdapter1 {
 	error_not_found := dxgi.HRESULT(-142213123)
-
+	found: bool = false
 	for i: u32 = 0;
 	    renderer.factory->EnumAdapters1(i, &renderer.adapter) != error_not_found;
 	    i += 1 {
@@ -261,10 +262,12 @@ create_adapter :: proc() -> ^dxgi.IAdapter1 {
 			   nil,
 		   ) >=
 		   0 {
+			found = true
 			break
-		} else {
-			fmt.println("Failed to create device")
 		}
+	}
+	if !found {
+		check(-1, "Failed to find suitable adapter")
 	}
 
 	if renderer.adapter == nil {
@@ -282,6 +285,14 @@ create_device :: proc() -> ^d3d12.IDevice {
 	)
 	check(hr, "Failed to create device")
 	return renderer.device
+}
+create_debug :: proc() {
+	hr: d3d12.HRESULT
+	debug: ^d3d12.IDebug1
+
+	hr = d3d12.GetDebugInterface(d3d12.IDebug1_UUID, cast(^rawptr)&debug)
+	check(hr, "Failed to get debug interface")
+	debug->EnableDebugLayer()
 }
 create_queue :: proc() -> ^d3d12.ICommandQueue {
 	hr: d3d12.HRESULT

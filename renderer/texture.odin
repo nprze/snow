@@ -226,7 +226,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 		AddressW       = .WRAP,
 		MipLODBias     = 0,
 		MaxAnisotropy  = 1,
-		ComparisonFunc = .ALWAYS,
+		ComparisonFunc = .NEVER,
 		BorderColor    = {0, 0, 0, 0},
 		MinLOD         = 0,
 		MaxLOD         = d3d12.FLOAT32_MAX,
@@ -261,9 +261,10 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 	textureOut.dHandle = texture
 
 	// cleanup
+	/*
 	stbi.image_free(data)
 	texture_upload->Release()
-	cmdList->Release()
+	cmdList->Release()*/
 }
 cleanup_texture :: proc(texture: ^Texture) {
 	texture.dHandle->Release()
