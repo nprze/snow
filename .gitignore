@@ -1,5 +1,9 @@
+# binaries and debug files
 *.exe
 *.pdb
 *.rdi
 raddbg.txt
+# editor
 .vscode/
+# odin
+ols.json

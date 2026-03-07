@@ -28,10 +28,12 @@ cursor_pos_callback :: proc "c" (window: glfw.WindowHandle, xpos: f64, ypos: f64
 	mu.input_mouse_move(&muContext, i32(xpos), i32(ypos))
 }
 
-mu_init :: proc() {
+ui_init :: proc() {
 	mu.init(&muContext)
 	muContext.text_width = mu.default_atlas_text_width
 	muContext.text_height = mu.default_atlas_text_height
+
+	init_texture_loader()
 
 	glfw.SetCharCallback(renderer.windowHandle, char_callback)
 	glfw.SetCursorPosCallback(renderer.windowHandle, cursor_pos_callback)
@@ -42,7 +44,48 @@ mu_init :: proc() {
 	desc := d3d12.VERSIONED_ROOT_SIGNATURE_DESC {
 		Version = ._1_0,
 	}
+	srv_range := d3d12.DESCRIPTOR_RANGE {
+		RangeType                         = .SRV,
+		NumDescriptors                    = 1,
+		BaseShaderRegister                = 0, // t0
+		RegisterSpace                     = 0,
+		OffsetInDescriptorsFromTableStart = 0,
+	}
 
+	sampler_range := d3d12.DESCRIPTOR_RANGE {
+		RangeType                         = .SAMPLER,
+		NumDescriptors                    = 1,
+		BaseShaderRegister                = 0, // s0
+		RegisterSpace                     = 0,
+		OffsetInDescriptorsFromTableStart = 0,
+	}
+
+	root_params: [2]d3d12.ROOT_PARAMETER
+
+	root_params[0] = {
+		ParameterType    = .DESCRIPTOR_TABLE,
+		ShaderVisibility = .PIXEL,
+	}
+	root_params[0].DescriptorTable = {
+		NumDescriptorRanges = 1,
+		pDescriptorRanges   = &srv_range,
+	}
+
+	root_params[1] = {
+		ParameterType    = .DESCRIPTOR_TABLE,
+		ShaderVisibility = .PIXEL,
+	}
+	root_params[1].DescriptorTable = {
+		NumDescriptorRanges = 1,
+		pDescriptorRanges   = &sampler_range,
+	}
+	desc.Desc_1_0 = {
+		NumParameters     = 2,
+		pParameters       = &root_params[0],
+		NumStaticSamplers = 0,
+		pStaticSamplers   = nil,
+		Flags             = {.ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT},
+	}
 	desc.Desc_1_0.Flags = {.ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT}
 	serialized_desc: ^d3d12.IBlob
 	hr = d3d12.SerializeVersionedRootSignature(&desc, &serialized_desc, nil)
@@ -141,14 +184,20 @@ mu_init :: proc() {
 	vs->Release()
 	ps->Release()
 }
-mu_begin :: proc() {
+ui_cleanup :: proc() {
+	renderer.uiPipeline->Release()
+	renderer.uiRootSignature->Release()
+	cleanup_texture_loader()
+	cleanup_vbuffer(&uiVertexBuffer)
+}
+ui_begin :: proc() {
 	mu.begin(&muContext)
 	reset_vbuffer(&uiVertexBuffer)
 }
-mu_end :: proc() {
+ui_end :: proc() {
 	mu.end(&muContext)
 }
-mu_render :: proc() {
+ui_render :: proc() {
 	/*
 	command_backing: ^mu.Command
 	for variant in mu.next_command_iterator(&muContext, &command_backing) {
@@ -179,6 +228,10 @@ mu_render :: proc() {
 	renderer.commandList->SetPipelineState(renderer.uiPipeline)
 	renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
 
+	heaps := [?]^d3d12.IDescriptorHeap{srvHeap, samplerHeap}
+
+	renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])
+
 	renderer.commandList->IASetVertexBuffers(0, 1, &uiVertexBuffer.dBufferView)
 	assert(uiVertexBuffer.vertexCount > 0)
 	renderer.commandList->DrawInstanced(u32(uiVertexBuffer.vertexCount), 1, 0, 0)
@@ -189,10 +242,10 @@ mu_render :: proc() {
 add_rect :: proc(area: Vec4, color: Vec4) {
 	vertices := [?]UiVertex {
 		{{area.x + area.z, area.y + area.w}, {1.0, 1.0}, color},
-		{{area.x + area.z, area.y}, {1.0, 1.0}, color},
-		{{area.x, area.y}, {1.0, 1.0}, color},
-		{{area.x, area.y}, {1.0, 1.0}, color},
-		{{area.x, area.y + area.w}, {1.0, 1.0}, color},
+		{{area.x + area.z, area.y}, {1.0, 0.0}, color},
+		{{area.x, area.y}, {0.0, 0.0}, color},
+		{{area.x, area.y}, {0.0, 0.0}, color},
+		{{area.x, area.y + area.w}, {0.0, 1.0}, color},
 		{{area.x + area.z, area.y + area.w}, {1.0, 1.0}, color},
 
 		/*

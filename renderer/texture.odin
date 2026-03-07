@@ -9,9 +9,50 @@ import dxgi "vendor:directx/dxgi"
 import stbi "vendor:stb/image"
 
 Texture :: struct {
-	width:   u32,
-	height:  u32,
-	dHandle: ^d3d12.IResource,
+	width:          u32,
+	height:         u32,
+	dHandle:        ^d3d12.IResource,
+	dSamplerHandle: d3d12.CPU_DESCRIPTOR_HANDLE,
+	dSrvHandle:     d3d12.CPU_DESCRIPTOR_HANDLE,
+}
+
+samplerHeap: ^d3d12.IDescriptorHeap
+srvHeap: ^d3d12.IDescriptorHeap
+
+init_texture_loader :: proc() {
+	// 16 desc max
+	// sampler heap
+	sampler_heap_desc := d3d12.DESCRIPTOR_HEAP_DESC {
+		Type           = .SAMPLER,
+		NumDescriptors = 16,
+		Flags          = d3d12.DESCRIPTOR_HEAP_FLAGS{.SHADER_VISIBLE},
+	}
+
+	hr := renderer.device.CreateDescriptorHeap(
+		renderer.device,
+		&sampler_heap_desc,
+		d3d12.IDescriptorHeap_UUID,
+		cast(^rawptr)&samplerHeap,
+	)
+	check(hr, "Failed to create sampler heap")
+	// SRV heap
+	srv_heap_desc := d3d12.DESCRIPTOR_HEAP_DESC {
+		Type           = .CBV_SRV_UAV,
+		NumDescriptors = 16,
+		Flags          = d3d12.DESCRIPTOR_HEAP_FLAGS{.SHADER_VISIBLE},
+	}
+
+	hr = renderer.device.CreateDescriptorHeap(
+		renderer.device,
+		&srv_heap_desc,
+		d3d12.IDescriptorHeap_UUID,
+		cast(^rawptr)&srvHeap,
+	)
+	check(hr, "Failed to create SRV heap")
+}
+cleanup_texture_loader :: proc() {
+	samplerHeap->Release()
+	srvHeap->Release()
 }
 
 load_texture :: proc(path: string, textureOut: ^Texture) {
@@ -19,7 +60,6 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 	pathCStr: cstring = strings.clone_to_cstring(path)
 	width, height, channels: i32
 	data := stbi.load(pathCStr, &width, &height, &channels, i32(4))
-	defer stbi.image_free(data)
 	if data == nil {
 		fmt.printf("Failed to load texture: %s", path)
 		assert(false)
@@ -178,5 +218,53 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 
 	wait_for_fence(&fence)
 
+	// sampler
+	sampler_desc := d3d12.SAMPLER_DESC {
+		Filter         = .MIN_MAG_MIP_LINEAR,
+		AddressU       = .WRAP,
+		AddressV       = .WRAP,
+		AddressW       = .WRAP,
+		MipLODBias     = 0,
+		MaxAnisotropy  = 1,
+		ComparisonFunc = .ALWAYS,
+		BorderColor    = {0, 0, 0, 0},
+		MinLOD         = 0,
+		MaxLOD         = d3d12.FLOAT32_MAX,
+	}
+	samplerHeap.GetCPUDescriptorHandleForHeapStart(samplerHeap, &textureOut.dSamplerHandle)
+
+	renderer.device.CreateSampler(renderer.device, &sampler_desc, textureOut.dSamplerHandle)
+
+	// srv
+	srv_desc := d3d12.SHADER_RESOURCE_VIEW_DESC {
+		Format                  = .R8G8B8A8_UNORM,
+		ViewDimension           = .TEXTURE2D,
+		Shader4ComponentMapping = d3d12.DEFAULT_SHADER_4_COMPONENT_MAPPING,
+	}
+
+	srv_desc.Texture2D = d3d12.TEX2D_SRV {
+		MostDetailedMip     = 0,
+		MipLevels           = 1,
+		ResourceMinLODClamp = 0,
+	}
+
+	srvHeap.GetCPUDescriptorHandleForHeapStart(srvHeap, &textureOut.dSrvHandle)
+
+	renderer.device.CreateShaderResourceView(
+		renderer.device,
+		texture,
+		&srv_desc,
+		textureOut.dSrvHandle,
+	)
+
+	// output
 	textureOut.dHandle = texture
+
+	// cleanup
+	stbi.image_free(data)
+	texture_upload->Release()
+	cmdList->Release()
+}
+cleanup_texture :: proc(texture: ^Texture) {
+	texture.dHandle->Release()
 }

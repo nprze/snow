@@ -85,7 +85,7 @@ unmap_vbuffer :: proc(buffer: ^VertexBuffer) {
 	buffer.mappedData = nil
 }
 
-clean_vbuffer :: proc(buffer: ^VertexBuffer) {
+cleanup_vbuffer :: proc(buffer: ^VertexBuffer) {
 	if (buffer.mappedData != nil) {
 		unmap_vbuffer(buffer)
 	}

@@ -69,7 +69,7 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	}
 	add_vertices(&basicTrigBuffer, vertices[:])
 	// ui specific
-	mu_init()
+	ui_init()
 	tex: Texture
 	load_texture("renderer/fonts/consolas.png", &tex)
 }
@@ -80,9 +80,9 @@ main_loop :: proc(window: glfw.WindowHandle) {
 
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents()
-		mu_begin()
+		ui_begin()
 		add_rect({0, 0, 0.5, 0.5}, {1, 1, 1, 0.5})
-		mu_end()
+		ui_end()
 		// render
 		hr = renderer.commandAllocator->Reset()
 		check(hr, "Failed resetting command allocator")
@@ -140,7 +140,7 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		renderer.commandList->DrawInstanced(3, 1, 0, 0)
 
 		// draw ui
-		mu_render()
+		ui_render()
 
 		to_present_barrier := to_render_target_barrier
 		to_present_barrier.Transition.StateBefore = {.RENDER_TARGET}
@@ -191,11 +191,11 @@ main_loop :: proc(window: glfw.WindowHandle) {
 }
 
 cleanup_renderer :: proc() {
+	cleanup_vbuffer(&basicTrigBuffer)
 	renderer.commandList->Release()
 	renderer.worldPipeline->Release()
-	renderer.uiPipeline->Release()
 	renderer.rootSignature->Release()
-	renderer.uiRootSignature->Release()
+	ui_cleanup()
 	for i: u32 = 0; i < RENDERTARGETS_COUNT; i += 1 {
 		renderer.renderTargets[i]->Release()
 	}
@@ -206,8 +206,7 @@ cleanup_renderer :: proc() {
 	renderer.device->Release()
 	renderer.adapter->Release()
 	renderer.factory->Release()
-	windows.CloseHandle(renderer.renderFinishedFence.fenceEvent)
-	renderer.renderFinishedFence.dFence->Release()
+	cleanup_fence(&renderer.renderFinishedFence)
 }
 
 create_window :: proc(width: i32, height: i32) -> glfw.WindowHandle {
@@ -409,6 +408,10 @@ create_fence :: proc(fenceOut: ^Fence) -> ^Fence {
 		panic("Failed to create fence event")
 	}
 	return fenceOut
+}
+cleanup_fence :: proc(fence: ^Fence) {
+	windows.CloseHandle(fence.fenceEvent)
+	fence.dFence->Release()
 }
 wait_for_fence :: proc(fence: ^Fence) {
 	hr: d3d12.HRESULT
