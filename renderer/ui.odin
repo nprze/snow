@@ -16,8 +16,6 @@ UiVertex :: struct {
 	color:    Vec4,
 }
 
-uiVertexBuffer: VertexBuffer
-consolasFont: Font
 lastX, lastY: i32
 
 char_callback :: proc "c" (window: glfw.WindowHandle, codepoint: rune) {
@@ -60,7 +58,7 @@ mouse_button_callback :: proc "c" (
 
 ui_init :: proc() {
 	init_texture_loader()
-	consolasFont = load_font("renderer/fonts/consolas.txt")
+	renderer.consolasFont = load_font("renderer/fonts/consolas.txt")
 
 	mu.init(&muContext)
 	muContext.text_width = mu.default_atlas_text_width
@@ -70,7 +68,8 @@ ui_init :: proc() {
 	glfw.SetCursorPosCallback(renderer.windowHandle, cursor_pos_callback)
 	glfw.SetScrollCallback(renderer.windowHandle, scroll_callback)
 	glfw.SetMouseButtonCallback(renderer.windowHandle, mouse_button_callback)
-	initialize_vbuffer(&uiVertexBuffer, 2048, size_of(UiVertex))
+
+	initialize_vbuffer(&renderer.uiVertexBuffer, 2048, size_of(UiVertex))
 
 	hr: d3d12.HRESULT
 	// root signature
@@ -221,12 +220,12 @@ ui_cleanup :: proc() {
 	renderer.uiPipeline->Release()
 	renderer.uiRootSignature->Release()
 	cleanup_texture_loader()
-	cleanup_vbuffer(&uiVertexBuffer)
-	cleanup_font(&consolasFont)
+	cleanup_vbuffer(&renderer.uiVertexBuffer)
+	cleanup_font(&renderer.consolasFont)
 }
 ui_begin :: proc() {
 	mu.begin(&muContext)
-	reset_vbuffer(&uiVertexBuffer)
+	reset_vbuffer(&renderer.uiVertexBuffer)
 }
 ui_end :: proc() {
 	mu.end(&muContext)
@@ -253,17 +252,33 @@ ui_render :: proc() {
 			{
 				add_text(
 					string(cmd.str),
-					consolasFont,
+					renderer.consolasFont,
 					Vec2{f32(cmd.pos.x), f32(cmd.pos.y)},
-					f32(cmd.size),
 					Vec3{1, 1, 1},
 				)
 				break
 			}
 		case ^mu.Command_Icon:
+			text: rune
+			switch cmd.id {
+			case .NONE:
+			case .CLOSE:
+				text = '✖'
+			case .CHECK:
+				text = '✔'
+			case .COLLAPSED:
+				text = '▶'
+			case .EXPANDED:
+				text = '▼'
+			case .RESIZE:
+				text = '⇲'
+			}
+			add_icon_screen(text, renderer.consolasFont, cmd.rect, Vec3{1, 1, 1})
+
 		case ^mu.Command_Jump:
+			fmt.println("jump is unsupported")
 		case ^mu.Command_Clip:
-			fmt.println("unsupported command")
+			fmt.println("clip is unsupported")
 		}
 	}
 
@@ -297,10 +312,10 @@ ui_render :: proc() {
 	renderer.commandList->SetGraphicsRootDescriptorTable(0, srv_gpu)
 	renderer.commandList->SetGraphicsRootDescriptorTable(1, sampler_gpu)
 
-	renderer.commandList->IASetVertexBuffers(0, 1, &uiVertexBuffer.dBufferView)
-	renderer.commandList->DrawInstanced(u32(uiVertexBuffer.vertexCount), 1, 0, 0)
+	renderer.commandList->IASetVertexBuffers(0, 1, &renderer.uiVertexBuffer.dBufferView)
+	renderer.commandList->DrawInstanced(u32(renderer.uiVertexBuffer.vertexCount), 1, 0, 0)
 
-	uiVertexBuffer.vertexCount = 0
+	renderer.uiVertexBuffer.vertexCount = 0
 }
 
 add_rect_screen :: proc(areaArg: Vec4, color: Vec4) {
@@ -312,6 +327,31 @@ add_rect_screen :: proc(areaArg: Vec4, color: Vec4) {
 	area.z *= renderer.oneOverDisplayWidth * 2
 	area.w *= -renderer.oneOverDisplayHeight * 2
 	add_rect(area, color)
+}
+add_icon_screen :: proc(text: rune, font: Font, rect: mu.Rect, color: Vec3) {
+	glyph := font.glyphMap[text]
+	minX := f32(rect.x) * renderer.oneOverDisplayWidth * 2 - 1 + 0.008
+	minY := 1 - f32(rect.y) * renderer.oneOverDisplayHeight * 2 - 0.008
+	maxX := f32(rect.x + rect.w) * renderer.oneOverDisplayWidth * 2 - 1 - 0.008
+	maxY := 1 - f32(rect.y + rect.h) * renderer.oneOverDisplayHeight * 2 + 0.008
+
+	u0 := glyph.uv.x
+	v0 := glyph.uv.y
+	u1 := glyph.uv.z
+	v1 := glyph.uv.w
+
+	colorVec4 := Vec4{color.x, color.y, color.z, 0.0}
+	vertices := [?]UiVertex {
+		{{maxX, maxY}, {u1, v1}, colorVec4},
+		{{maxX, minY}, {u1, v0}, colorVec4},
+		{{minX, minY}, {u0, v0}, colorVec4},
+		{{minX, minY}, {u0, v0}, colorVec4},
+		{{minX, maxY}, {u0, v1}, colorVec4},
+		{{maxX, maxY}, {u1, v1}, colorVec4},
+	}
+
+	write_ui(&renderer.uiVertexBuffer, vertices[:])
+
 }
 
 add_rect :: proc(area: Vec4, color: Vec4) {
@@ -333,10 +373,10 @@ add_rect :: proc(area: Vec4, color: Vec4) {
 		{{1.0, 1.0}, {1, 1, 1, 1}},
 		*/
 	}
-	write_ui(&uiVertexBuffer, vertices[:])
+	write_ui(&renderer.uiVertexBuffer, vertices[:])
 }
 
-add_text :: proc(text: string, font: Font, cursorPos: Vec2, desiredHeightPixel: f32, color: Vec3) {
+add_text :: proc(text: string, font: Font, cursorPos: Vec2, color: Vec3) {
 	scale := 18 / font.size
 
 	cursorMU := cursorPos
@@ -361,7 +401,7 @@ add_text :: proc(text: string, font: Font, cursorPos: Vec2, desiredHeightPixel: 
 		v1 := glyph.uv.w
 
 		area: Vec4 = {x, y, w, h}
-		colorVec4 := Vec4{1, 1, 1, 0.0}
+		colorVec4 := Vec4{color.x, color.y, color.z, 0.0}
 		vertices := [?]UiVertex {
 			{{area.x + area.z, area.y - area.w}, {u1, v1}, colorVec4},
 			{{area.x + area.z, area.y}, {u1, v0}, colorVec4},
@@ -371,6 +411,6 @@ add_text :: proc(text: string, font: Font, cursorPos: Vec2, desiredHeightPixel: 
 			{{area.x + area.z, area.y - area.w}, {u1, v1}, colorVec4},
 		}
 
-		write_ui(&uiVertexBuffer, vertices[:])
+		write_ui(&renderer.uiVertexBuffer, vertices[:])
 	}
 }

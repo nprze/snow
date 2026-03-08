@@ -20,7 +20,31 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 	desc := d3d12.VERSIONED_ROOT_SIGNATURE_DESC {
 		Version = ._1_0,
 	}
+	cbv_range := d3d12.DESCRIPTOR_RANGE {
+		RangeType                         = .CBV,
+		NumDescriptors                    = 1,
+		BaseShaderRegister                = 0,
+		RegisterSpace                     = 0,
+		OffsetInDescriptorsFromTableStart = 0,
+	}
+	root_params: [1]d3d12.ROOT_PARAMETER
 
+	root_params[0] = {
+		ParameterType    = .DESCRIPTOR_TABLE,
+		ShaderVisibility = .VERTEX,
+	}
+	root_params[0].DescriptorTable = {
+		NumDescriptorRanges = 1,
+		pDescriptorRanges   = &cbv_range,
+	}
+
+	desc.Desc_1_0 = {
+		NumParameters     = 1,
+		pParameters       = &root_params[0],
+		NumStaticSamplers = 0,
+		pStaticSamplers   = nil,
+		Flags             = {.ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT},
+	}
 	desc.Desc_1_0.Flags = {.ALLOW_INPUT_ASSEMBLER_INPUT_LAYOUT}
 	serialized_desc: ^d3d12.IBlob
 	hr = d3d12.SerializeVersionedRootSignature(&desc, &serialized_desc, nil)

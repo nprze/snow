@@ -70,12 +70,17 @@ load_font :: proc(path: string) -> Font {
 			}
 		}
 
-		if strings.has_prefix(line, "file=") {
-			name := strings.trim_prefix(line, "file=")
-			name = strings.trim(name, "\"")
-			atlas_file = name
-		}
+		if strings.has_prefix(line, "page") {
+			fields := strings.split(line, " ")
 
+			for f in fields {
+				if strings.has_prefix(f, "file=") {
+					name := strings.trim_prefix(f, "file=")
+					name = strings.trim(name, "\"") // remove quotes
+					atlas_file = name
+				}
+			}
+		}
 		if strings.has_prefix(line, "char ") {
 			fields := strings.split(line, " ")
 

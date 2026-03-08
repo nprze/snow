@@ -37,6 +37,8 @@ Renderer :: struct {
 	// ui
 	uiPipeline:           ^d3d12.IPipelineState,
 	uiRootSignature:      ^d3d12.IRootSignature,
+	uiVertexBuffer:       VertexBuffer,
+	consolasFont:         Font,
 	renderTargets:        [RENDERTARGETS_COUNT]^d3d12.IResource,
 	descriptorHeap:       ^d3d12.IDescriptorHeap,
 	renderFinishedFence:  Fence,
@@ -65,6 +67,7 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	// world pipeline specific
 	create_root_signature()
 	create_pipeline()
+	create_camera()
 	create_command_list(&renderer.commandList)
 	initialize_vbuffer(&basicTrigBuffer, 3, size_of(BasicVertex))
 	vertices := [?]BasicVertex {
@@ -84,14 +87,12 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		glfw.PollEvents()
 		ui_begin()
 		if mu.begin_window(&muContext, "Hello Window", mu.Rect{100, 100, 300, 200}) {
-			mu.layout_row(&muContext, []i32{300})
+			mu.layout_row(&muContext, []i32{250})
 			mu.label(&muContext, "Hello from Odin + microui!")
 			value: f32 = 50
 			mu.slider(&muContext, &value, 0, 100)
 			mu.end_window(&muContext)
 		}
-		//add_rect({0, 0, 0.5, 0.5}, {1, 1, 1, 1.0})
-		//add_text("hello world!", consolasFont, {0, 0}, 200.0, {1, 1, 1})
 		ui_end()
 		// render
 		hr = renderer.commandAllocator->Reset()
@@ -143,6 +144,11 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		// clear backbuffer
 		clearcolor := [?]f32{0.05, 0.05, 0.05, 1.0}
 		renderer.commandList->ClearRenderTargetView(rtv_handle, &clearcolor, 0, nil)
+
+		// bind descriptors
+		camera_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
+		cbvHeap.GetGPUDescriptorHandleForHeapStart(cbvHeap, &camera_gpu)
+		renderer.commandList->SetGraphicsRootDescriptorTable(0, camera_gpu)
 
 		// draw call
 		renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
