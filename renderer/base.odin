@@ -19,25 +19,27 @@ Fence :: struct {
 }
 
 Renderer :: struct {
-	displayWidth:        u32,
-	displayHeight:       u32,
-	windowHandle:        glfw.WindowHandle,
-	factory:             ^dxgi.IFactory4,
-	adapter:             ^dxgi.IAdapter1,
-	device:              ^d3d12.IDevice,
-	queue:               ^d3d12.ICommandQueue,
-	swapchain:           ^dxgi.ISwapChain3,
-	commandAllocator:    ^d3d12.ICommandAllocator,
-	commandList:         ^d3d12.IGraphicsCommandList,
+	displayWidth:         u32,
+	displayHeight:        u32,
+	oneOverDisplayWidth:  f32,
+	oneOverDisplayHeight: f32,
+	windowHandle:         glfw.WindowHandle,
+	factory:              ^dxgi.IFactory4,
+	adapter:              ^dxgi.IAdapter1,
+	device:               ^d3d12.IDevice,
+	queue:                ^d3d12.ICommandQueue,
+	swapchain:            ^dxgi.ISwapChain3,
+	commandAllocator:     ^d3d12.ICommandAllocator,
+	commandList:          ^d3d12.IGraphicsCommandList,
 	// world
-	worldPipeline:       ^d3d12.IPipelineState,
-	rootSignature:       ^d3d12.IRootSignature,
+	worldPipeline:        ^d3d12.IPipelineState,
+	rootSignature:        ^d3d12.IRootSignature,
 	// ui
-	uiPipeline:          ^d3d12.IPipelineState,
-	uiRootSignature:     ^d3d12.IRootSignature,
-	renderTargets:       [RENDERTARGETS_COUNT]^d3d12.IResource,
-	descriptorHeap:      ^d3d12.IDescriptorHeap,
-	renderFinishedFence: Fence,
+	uiPipeline:           ^d3d12.IPipelineState,
+	uiRootSignature:      ^d3d12.IRootSignature,
+	renderTargets:        [RENDERTARGETS_COUNT]^d3d12.IResource,
+	descriptorHeap:       ^d3d12.IDescriptorHeap,
+	renderFinishedFence:  Fence,
 }
 
 renderer: Renderer
@@ -48,6 +50,8 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	renderer.windowHandle = window
 	renderer.displayWidth = width
 	renderer.displayHeight = height
+	renderer.oneOverDisplayWidth = 1.0 / f32(width)
+	renderer.oneOverDisplayHeight = 1.0 / f32(height)
 	create_debug()
 	create_dxgi_factory()
 	create_adapter()
@@ -71,10 +75,7 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	add_vertices(&basicTrigBuffer, vertices[:])
 	// ui specific
 	ui_init()
-	tex: Texture
-	load_texture("renderer/fonts/consolas.png", &tex)
 }
-
 main_loop :: proc(window: glfw.WindowHandle) {
 	hr: d3d12.HRESULT
 	frame_index := renderer.swapchain->GetCurrentBackBufferIndex()
@@ -82,7 +83,15 @@ main_loop :: proc(window: glfw.WindowHandle) {
 	for !glfw.WindowShouldClose(window) {
 		glfw.PollEvents()
 		ui_begin()
-		add_rect({0, 0, 0.5, 0.5}, {1, 1, 1, 1.0})
+		if mu.begin_window(&muContext, "Hello Window", mu.Rect{100, 100, 300, 200}) {
+			mu.layout_row(&muContext, []i32{300})
+			mu.label(&muContext, "Hello from Odin + microui!")
+			value: f32 = 50
+			mu.slider(&muContext, &value, 0, 100)
+			mu.end_window(&muContext)
+		}
+		//add_rect({0, 0, 0.5, 0.5}, {1, 1, 1, 1.0})
+		//add_text("hello world!", consolasFont, {0, 0}, 200.0, {1, 1, 1})
 		ui_end()
 		// render
 		hr = renderer.commandAllocator->Reset()

@@ -17,6 +17,8 @@ UiVertex :: struct {
 }
 
 uiVertexBuffer: VertexBuffer
+consolasFont: Font
+lastX, lastY: i32
 
 char_callback :: proc "c" (window: glfw.WindowHandle, codepoint: rune) {
 	context = runtime.default_context()
@@ -26,18 +28,49 @@ char_callback :: proc "c" (window: glfw.WindowHandle, codepoint: rune) {
 cursor_pos_callback :: proc "c" (window: glfw.WindowHandle, xpos: f64, ypos: f64) {
 	context = runtime.default_context()
 	mu.input_mouse_move(&muContext, i32(xpos), i32(ypos))
+	lastX = i32(xpos)
+	lastY = i32(ypos)
+}
+scroll_callback :: proc "c" (window: glfw.WindowHandle, xoffset: f64, yoffset: f64) {
+	context = runtime.default_context()
+	mu.input_scroll(&muContext, 0, i32(yoffset))
+}
+mouse_button_callback :: proc "c" (
+	window: glfw.WindowHandle,
+	button: i32,
+	action: i32,
+	mods: i32,
+) {
+	context = runtime.default_context()
+	btn: mu.Mouse
+	switch button {
+	case glfw.MOUSE_BUTTON_LEFT:
+		btn = mu.Mouse.LEFT
+	case glfw.MOUSE_BUTTON_RIGHT:
+		btn = mu.Mouse.RIGHT
+	case glfw.MOUSE_BUTTON_MIDDLE:
+		btn = mu.Mouse.MIDDLE
+	}
+	if action == glfw.PRESS {
+		mu.input_mouse_down(&muContext, lastX, lastY, btn)
+	} else if action == glfw.RELEASE {
+		mu.input_mouse_up(&muContext, lastX, lastY, btn)
+	}
 }
 
 ui_init :: proc() {
+	init_texture_loader()
+	consolasFont = load_font("renderer/fonts/consolas.txt")
+
 	mu.init(&muContext)
 	muContext.text_width = mu.default_atlas_text_width
 	muContext.text_height = mu.default_atlas_text_height
 
-	init_texture_loader()
-
 	glfw.SetCharCallback(renderer.windowHandle, char_callback)
 	glfw.SetCursorPosCallback(renderer.windowHandle, cursor_pos_callback)
-	initialize_vbuffer(&uiVertexBuffer, 265, size_of(UiVertex))
+	glfw.SetScrollCallback(renderer.windowHandle, scroll_callback)
+	glfw.SetMouseButtonCallback(renderer.windowHandle, mouse_button_callback)
+	initialize_vbuffer(&uiVertexBuffer, 2048, size_of(UiVertex))
 
 	hr: d3d12.HRESULT
 	// root signature
@@ -151,7 +184,7 @@ ui_init :: proc() {
 		SampleMask = 0xFFFFFFFF,
 		RasterizerState = {
 			FillMode = .SOLID,
-			CullMode = .BACK,
+			CullMode = .NONE,
 			FrontCounterClockwise = false,
 			DepthBias = 0,
 			DepthBiasClamp = 0,
@@ -189,6 +222,7 @@ ui_cleanup :: proc() {
 	renderer.uiRootSignature->Release()
 	cleanup_texture_loader()
 	cleanup_vbuffer(&uiVertexBuffer)
+	cleanup_font(&consolasFont)
 }
 ui_begin :: proc() {
 	mu.begin(&muContext)
@@ -198,17 +232,40 @@ ui_end :: proc() {
 	mu.end(&muContext)
 }
 ui_render :: proc() {
-	/*
+
 	command_backing: ^mu.Command
 	for variant in mu.next_command_iterator(&muContext, &command_backing) {
 		switch cmd in variant {
 		case ^mu.Command_Rect:
+			{
+				add_rect_screen(
+					{f32(cmd.rect.x), f32(cmd.rect.y), f32(cmd.rect.w), f32(cmd.rect.h)},
+					{
+						f32(cmd.color.r) * oneOver255,
+						f32(cmd.color.g) * oneOver255,
+						f32(cmd.color.b) * oneOver255,
+						f32(cmd.color.a) * oneOver255,
+					},
+				)
+				break
+			}
+		case ^mu.Command_Text:
+			{
+				add_text(
+					string(cmd.str),
+					consolasFont,
+					Vec2{f32(cmd.pos.x), f32(cmd.pos.y)},
+					f32(cmd.size),
+					Vec3{1, 1, 1},
+				)
+				break
+			}
+		case ^mu.Command_Icon:
 		case ^mu.Command_Jump:
 		case ^mu.Command_Clip:
-		case ^mu.Command_Text:
-		case ^mu.Command_Icon:
+			fmt.println("unsupported command")
 		}
-	}*/
+	}
 
 	viewport := d3d12.VIEWPORT {
 		Width  = f32(renderer.displayWidth),
@@ -236,25 +293,35 @@ ui_render :: proc() {
 	srvHeap.GetGPUDescriptorHandleForHeapStart(srvHeap, &srv_gpu)
 	samplerHeap.GetGPUDescriptorHandleForHeapStart(samplerHeap, &sampler_gpu)
 
+	renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])
 	renderer.commandList->SetGraphicsRootDescriptorTable(0, srv_gpu)
 	renderer.commandList->SetGraphicsRootDescriptorTable(1, sampler_gpu)
-	renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])
 
 	renderer.commandList->IASetVertexBuffers(0, 1, &uiVertexBuffer.dBufferView)
-	assert(uiVertexBuffer.vertexCount > 0)
 	renderer.commandList->DrawInstanced(u32(uiVertexBuffer.vertexCount), 1, 0, 0)
 
 	uiVertexBuffer.vertexCount = 0
 }
 
+add_rect_screen :: proc(areaArg: Vec4, color: Vec4) {
+	area := areaArg
+	area.x *= renderer.oneOverDisplayWidth
+	area.y *= renderer.oneOverDisplayHeight
+	area.x = area.x * 2 - 1
+	area.y = 1 - area.y * 2
+	area.z *= renderer.oneOverDisplayWidth * 2
+	area.w *= -renderer.oneOverDisplayHeight * 2
+	add_rect(area, color)
+}
+
 add_rect :: proc(area: Vec4, color: Vec4) {
 	vertices := [?]UiVertex {
-		{{area.x + area.z, area.y + area.w}, {0.0, 0.0}, color},
-		{{area.x + area.z, area.y}, {0.0, 1.0}, color},
-		{{area.x, area.y}, {1.0, 1.0}, color},
-		{{area.x, area.y}, {1.0, 1.0}, color},
-		{{area.x, area.y + area.w}, {1.0, 0.0}, color},
-		{{area.x + area.z, area.y + area.w}, {0.0, 0.0}, color},
+		{{area.x + area.z, area.y + area.w}, {1.0, 1.0}, color},
+		{{area.x + area.z, area.y}, {1.0, 0.0}, color},
+		{{area.x, area.y}, {0.0, 0.0}, color},
+		{{area.x, area.y}, {0.0, 0.0}, color},
+		{{area.x, area.y + area.w}, {0.0, 1.0}, color},
+		{{area.x + area.z, area.y + area.w}, {1.0, 1.0}, color},
 
 		/*
 		proper order for fullscreen quad (cull mode back)
@@ -267,4 +334,43 @@ add_rect :: proc(area: Vec4, color: Vec4) {
 		*/
 	}
 	write_ui(&uiVertexBuffer, vertices[:])
+}
+
+add_text :: proc(text: string, font: Font, cursorPos: Vec2, desiredHeightPixel: f32, color: Vec3) {
+	scale := 18 / font.size
+
+	cursorMU := cursorPos
+
+	for r in text {
+		glyph, ok := font.glyphMap[r]
+		if !ok {
+			continue
+		}
+
+		w := (glyph.width * scale) * renderer.oneOverDisplayWidth * 2
+		h := (glyph.height * scale) * renderer.oneOverDisplayHeight * 2
+
+		x := (cursorMU.x + glyph.xOffset * scale) * renderer.oneOverDisplayWidth * 2 - 1
+		y := 1 - (cursorMU.y + glyph.yOffset * scale) * renderer.oneOverDisplayHeight * 2
+
+		cursorMU.x += (glyph.xAdvance) * scale
+
+		u0 := glyph.uv.x
+		v0 := glyph.uv.y
+		u1 := glyph.uv.z
+		v1 := glyph.uv.w
+
+		area: Vec4 = {x, y, w, h}
+		colorVec4 := Vec4{1, 1, 1, 0.0}
+		vertices := [?]UiVertex {
+			{{area.x + area.z, area.y - area.w}, {u1, v1}, colorVec4},
+			{{area.x + area.z, area.y}, {u1, v0}, colorVec4},
+			{{area.x, area.y}, {u0, v0}, colorVec4},
+			{{area.x, area.y}, {u0, v0}, colorVec4},
+			{{area.x, area.y - area.w}, {u0, v1}, colorVec4},
+			{{area.x + area.z, area.y - area.w}, {u1, v1}, colorVec4},
+		}
+
+		write_ui(&uiVertexBuffer, vertices[:])
+	}
 }

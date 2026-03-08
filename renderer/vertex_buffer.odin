@@ -63,12 +63,14 @@ add_vertices_ui :: proc(buffer: ^VertexBuffer, vertices: []UiVertex) {
 
 write :: proc(buffer: ^VertexBuffer, vertices: []BasicVertex) {
 	assert(buffer.vertexCount + len(vertices) <= buffer.maxVertexCount)
-	mem.copy(buffer.mappedData, rawptr(&vertices[0]), size_of(BasicVertex) * len(vertices))
+	dst := uintptr(buffer.mappedData) + uintptr(buffer.vertexCount * size_of(BasicVertex))
+	mem.copy(rawptr(dst), rawptr(&vertices[0]), size_of(BasicVertex) * len(vertices))
 	buffer.vertexCount += len(vertices)
 }
 write_ui :: proc(buffer: ^VertexBuffer, vertices: []UiVertex) {
 	assert(buffer.vertexCount + len(vertices) <= buffer.maxVertexCount)
-	mem.copy(buffer.mappedData, rawptr(&vertices[0]), size_of(UiVertex) * len(vertices))
+	dst := uintptr(buffer.mappedData) + uintptr(buffer.vertexCount * size_of(UiVertex))
+	mem.copy(rawptr(dst), rawptr(&vertices[0]), size_of(UiVertex) * len(vertices))
 	buffer.vertexCount += len(vertices)
 }
 

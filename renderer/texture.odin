@@ -20,6 +20,7 @@ samplerHeap: ^d3d12.IDescriptorHeap
 srvHeap: ^d3d12.IDescriptorHeap
 
 init_texture_loader :: proc() {
+	stbi.set_flip_vertically_on_load(1)
 	// 16 desc max
 	// sampler heap
 	sampler_heap_desc := d3d12.DESCRIPTOR_HEAP_DESC {
