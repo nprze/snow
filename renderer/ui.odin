@@ -8,6 +8,7 @@ import glfw "vendor:glfw"
 import mu "vendor:microui"
 
 oneOver255: f32 = 1.0 / 255.0
+defaultFontSizePixel: i32 = 16
 
 UiVertex :: struct {
 	// include allignment padding here.
@@ -31,7 +32,7 @@ cursor_pos_callback :: proc "c" (window: glfw.WindowHandle, xpos: f64, ypos: f64
 }
 scroll_callback :: proc "c" (window: glfw.WindowHandle, xoffset: f64, yoffset: f64) {
 	context = runtime.default_context()
-	mu.input_scroll(&muContext, 0, i32(yoffset))
+	mu.input_scroll(&muContext, 0, i32(-yoffset * 10))
 }
 mouse_button_callback :: proc "c" (
 	window: glfw.WindowHandle,
@@ -62,7 +63,7 @@ ui_init :: proc() {
 
 	mu.init(&muContext)
 	muContext.text_width = mu.default_atlas_text_width
-	muContext.text_height = mu.default_atlas_text_height
+	muContext.text_height = text_height
 
 	glfw.SetCharCallback(renderer.windowHandle, char_callback)
 	glfw.SetCursorPosCallback(renderer.windowHandle, cursor_pos_callback)
@@ -276,9 +277,7 @@ ui_render :: proc() {
 			add_icon_screen(text, renderer.consolasFont, cmd.rect, Vec3{1, 1, 1})
 
 		case ^mu.Command_Jump:
-			fmt.println("jump is unsupported")
 		case ^mu.Command_Clip:
-			fmt.println("clip is unsupported")
 		}
 	}
 
@@ -377,7 +376,7 @@ add_rect :: proc(area: Vec4, color: Vec4) {
 }
 
 add_text :: proc(text: string, font: Font, cursorPos: Vec2, color: Vec3) {
-	scale := 18 / font.size
+	scale := f32(defaultFontSizePixel) / font.size
 
 	cursorMU := cursorPos
 
@@ -413,4 +412,7 @@ add_text :: proc(text: string, font: Font, cursorPos: Vec2, color: Vec3) {
 
 		write_ui(&renderer.uiVertexBuffer, vertices[:])
 	}
+}
+text_height :: proc(font: mu.Font) -> i32 {
+	return defaultFontSizePixel
 }

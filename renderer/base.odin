@@ -71,9 +71,9 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_command_list(&renderer.commandList)
 	initialize_vbuffer(&basicTrigBuffer, 3, size_of(BasicVertex))
 	vertices := [?]BasicVertex {
-		{{0.0, 0.5, 0.0}, {1, 0, 0}},
-		{{0.5, -0.5, 0.0}, {0, 1, 0}},
-		{{-0.5, -0.5, 0.0}, {0, 0, 1}},
+		{{0.0, 0.5, -2.0}, {1, 0, 0}},
+		{{0.5, -0.5, -2.0}, {0, 1, 0}},
+		{{-0.5, -0.5, -2.0}, {0, 0, 1}},
 	}
 	add_vertices(&basicTrigBuffer, vertices[:])
 	// ui specific
@@ -84,13 +84,20 @@ main_loop :: proc(window: glfw.WindowHandle) {
 	frame_index := renderer.swapchain->GetCurrentBackBufferIndex()
 
 	for !glfw.WindowShouldClose(window) {
+		// update
 		glfw.PollEvents()
+		camera_update()
 		ui_begin()
 		if mu.begin_window(&muContext, "Hello Window", mu.Rect{100, 100, 300, 200}) {
 			mu.layout_row(&muContext, []i32{250})
-			mu.label(&muContext, "Hello from Odin + microui!")
-			value: f32 = 50
-			mu.slider(&muContext, &value, 0, 100)
+			mu.label(&muContext, "pos:")
+			mu.slider(&muContext, &cameraData.position.x, -2, 2)
+			mu.slider(&muContext, &cameraData.position.y, -2, 2)
+			mu.slider(&muContext, &cameraData.position.z, -2, 2)
+			mu.label(&muContext, "dir:")
+			mu.slider(&muContext, &cameraData.direction.x, -2, 2)
+			mu.slider(&muContext, &cameraData.direction.y, -2, 2)
+			mu.slider(&muContext, &cameraData.direction.z, -2, 2)
 			mu.end_window(&muContext)
 		}
 		ui_end()
@@ -112,7 +119,8 @@ main_loop :: proc(window: glfw.WindowHandle) {
 
 		hr = renderer.commandList->Reset(renderer.commandAllocator, renderer.worldPipeline)
 		check(hr, "Failed to reset command list")
-		// This state is reset everytime the cmd list is reset, so we need to rebind it
+
+		renderer.commandList->SetDescriptorHeaps(1, &cameraData.cbvHeap)
 		renderer.commandList->SetGraphicsRootSignature(renderer.rootSignature)
 		renderer.commandList->RSSetViewports(1, &viewport)
 		renderer.commandList->RSSetScissorRects(1, &scissor_rect)
@@ -147,7 +155,7 @@ main_loop :: proc(window: glfw.WindowHandle) {
 
 		// bind descriptors
 		camera_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
-		cbvHeap.GetGPUDescriptorHandleForHeapStart(cbvHeap, &camera_gpu)
+		cameraData.cbvHeap.GetGPUDescriptorHandleForHeapStart(cameraData.cbvHeap, &camera_gpu)
 		renderer.commandList->SetGraphicsRootDescriptorTable(0, camera_gpu)
 
 		// draw call

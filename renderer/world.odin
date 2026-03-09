@@ -3,6 +3,12 @@ package renderer
 import os "core:os"
 import d3d12 "vendor:directx/d3d12"
 
+BasicVertex :: struct {
+	// include allignment padding here.
+	position: Vec3,
+	color:    Vec3,
+}
+
 basicTrigBuffer: VertexBuffer
 
 read_file :: proc(path: string) -> cstring {
