@@ -2,12 +2,13 @@ package renderer
 
 import fmt "core:fmt"
 import "core:math"
+import "core:math/linalg"
 import mem "core:mem"
 import d3d12 "vendor:directx/d3d12"
 import dxgi "vendor:directx/dxgi"
 
 UniformData :: struct {
-	camera: Mat4,
+	camera: [16]f32,
 }
 
 Camera :: struct {
@@ -74,12 +75,12 @@ create_camera :: proc() {
 	check(hr, "Failed to create texture resource")
 
 	// default values
-	cameraData.position = {0, 0, -1}
+	cameraData.position = {0, 0, -2}
 	cameraData.direction = {0, 0, 1}
 	cameraData.up = {0, 1, 0}
 	cameraData.fov = math.to_radians_f32(45)
 	cameraData.aspect = f32(renderer.displayWidth) / f32(renderer.displayHeight)
-	cameraData.near = 0.001
+	cameraData.near = 0.01
 	cameraData.far = 1000.0
 
 	recalculate_camera()
@@ -99,27 +100,31 @@ create_camera :: proc() {
 	renderer.device.CreateConstantBufferView(renderer.device, &cbv_desc, cameraData.heapHandle)
 }
 recalculate_camera :: proc() {
+	cam := cameraData
+	eye := cam.position
+	center := cam.position + cam.direction
+	up := cam.up
+	view := linalg.matrix4_look_at_f32(eye, center, up)
+	proj := linalg.matrix4_perspective_f32(cam.fov, cam.aspect, cam.near, cam.far)
+	vp := linalg.transpose(proj * view)
 
-	// identity
-
-	mem.set(&cameraData.currentCameraMatrix, 0, size_of(cameraData.currentCameraMatrix))
-	cameraData.currentCameraMatrix.camera.a.x = 1
-	cameraData.currentCameraMatrix.camera.b.y = 1
-	cameraData.currentCameraMatrix.camera.c.z = 1
-	cameraData.currentCameraMatrix.camera.d.w = 1
-	cameraData.currentCameraMatrix.camera.a.w = 1
-
-	view := look_at({0, 0, 0}, {0, 0, -10}, {0, 1, 0})
-	proj := perspective(math.to_radians_f32(45), 1, 0.01, 100000.0)
-	cameraData.currentCameraMatrix.camera = mul_mat(view, proj)
+	cameraData.currentCameraMatrix.camera = transmute([16]f32)vp
 }
 
 copy_camera_data :: proc() {
+
+	// print
+	fmt.println("m:")
+	for i in 0 ..< 4 {
+		for j in 0 ..< 4 {
+			fmt.printf("%2f ", cameraData.currentCameraMatrix.camera[i * 4 + j])
+		}
+		fmt.println()
+	}
 	mapped: rawptr
 	cameraData.dBuffer.Map(cameraData.dBuffer, 0, nil, &mapped)
-	mem.copy(mapped, &cameraData.currentCameraMatrix, cameraData.bufferSize)
+	mem.copy(mapped, &cameraData.currentCameraMatrix.camera, cameraData.bufferSize)
 	cameraData.dBuffer.Unmap(cameraData.dBuffer, 0, nil)
-	print_mat(cameraData.currentCameraMatrix.camera)
 }
 
 camera_update :: proc() {

@@ -110,7 +110,7 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 		SampleMask = 0xFFFFFFFF,
 		RasterizerState = {
 			FillMode = .SOLID,
-			CullMode = .BACK,
+			CullMode = .NONE,
 			FrontCounterClockwise = false,
 			DepthBias = 0,
 			DepthBiasClamp = 0,

@@ -71,9 +71,9 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_command_list(&renderer.commandList)
 	initialize_vbuffer(&basicTrigBuffer, 3, size_of(BasicVertex))
 	vertices := [?]BasicVertex {
-		{{0.0, 0.5, -2.0}, {1, 0, 0}},
-		{{0.5, -0.5, -2.0}, {0, 1, 0}},
-		{{-0.5, -0.5, -2.0}, {0, 0, 1}},
+		{{0.0, 0.5, 0.0}, {1, 0, 0}},
+		{{0.5, -0.5, 0.0}, {0, 1, 0}},
+		{{-0.5, -0.5, 0.0}, {0, 0, 1}},
 	}
 	add_vertices(&basicTrigBuffer, vertices[:])
 	// ui specific
@@ -95,9 +95,9 @@ main_loop :: proc(window: glfw.WindowHandle) {
 			mu.slider(&muContext, &cameraData.position.y, -2, 2)
 			mu.slider(&muContext, &cameraData.position.z, -2, 2)
 			mu.label(&muContext, "dir:")
-			mu.slider(&muContext, &cameraData.direction.x, -2, 2)
-			mu.slider(&muContext, &cameraData.direction.y, -2, 2)
-			mu.slider(&muContext, &cameraData.direction.z, -2, 2)
+			mu.slider(&muContext, &cameraData.direction.x, -20, 20)
+			mu.slider(&muContext, &cameraData.direction.y, -20, 20)
+			mu.slider(&muContext, &cameraData.direction.z, -20, 20)
 			mu.end_window(&muContext)
 		}
 		ui_end()
@@ -267,7 +267,7 @@ create_dxgi_factory :: proc() -> ^dxgi.IFactory4 {
 	return renderer.factory
 }
 create_adapter :: proc() -> ^dxgi.IAdapter1 {
-	error_not_found := dxgi.HRESULT(-142213123)
+	error_not_found := dxgi.HRESULT(0x887A0002)
 	found: bool = false
 	for i: u32 = 0;
 	    renderer.factory->EnumAdapters1(i, &renderer.adapter) != error_not_found;
@@ -311,10 +311,12 @@ create_device :: proc() -> ^d3d12.IDevice {
 }
 create_debug :: proc() {
 	hr: d3d12.HRESULT
-	debug: ^d3d12.IDebug1
+	debug: ^d3d12.IDebug
 
-	hr = d3d12.GetDebugInterface(d3d12.IDebug1_UUID, cast(^rawptr)&debug)
-	check(hr, "Failed to get debug interface")
+	hr = d3d12.GetDebugInterface(d3d12.IDebug_UUID, cast(^rawptr)&debug)
+	if hr < 0 {
+		return
+	}
 	debug->EnableDebugLayer()
 }
 create_queue :: proc() -> ^d3d12.ICommandQueue {
