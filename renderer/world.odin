@@ -6,6 +6,7 @@ import d3d12 "vendor:directx/d3d12"
 BasicVertex :: struct {
 	// include allignment padding here.
 	position: Vec3,
+	normal:   Vec3,
 	color:    Vec3,
 }
 
@@ -77,9 +78,15 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 	vertex_format: []d3d12.INPUT_ELEMENT_DESC = {
 		{SemanticName = "POSITION", Format = .R32G32B32_FLOAT, InputSlotClass = .PER_VERTEX_DATA},
 		{
-			SemanticName = "COLOR",
+			SemanticName = "NORMAL",
 			Format = .R32G32B32_FLOAT,
 			AlignedByteOffset = size_of(f32) * 3,
+			InputSlotClass = .PER_VERTEX_DATA,
+		},
+		{
+			SemanticName = "COLOR",
+			Format = .R32G32B32_FLOAT,
+			AlignedByteOffset = size_of(f32) * 6,
 			InputSlotClass = .PER_VERTEX_DATA,
 		},
 	}
@@ -110,7 +117,7 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 		SampleMask = 0xFFFFFFFF,
 		RasterizerState = {
 			FillMode = .SOLID,
-			CullMode = .NONE,
+			CullMode = .FRONT,
 			FrontCounterClockwise = false,
 			DepthBias = 0,
 			DepthBiasClamp = 0,

@@ -22,6 +22,8 @@ Camera :: struct {
 	far:                 f32,
 	yaw:                 f32,
 	pitch:               f32,
+	movingSpeed:         f32,
+	dragSpeed:           f32,
 	currentCameraMatrix: UniformData,
 	// dx12 stuff
 	dBuffer:             ^d3d12.IResource,
@@ -90,6 +92,9 @@ create_camera :: proc() {
 	cameraData.far = 1000.0
 	cameraData.yaw = 90
 
+	cameraData.movingSpeed = 2.0
+	cameraData.dragSpeed = 1.0
+
 	recalculate_camera()
 	copy_camera_data()
 
@@ -142,6 +147,7 @@ camera_update :: proc(dt: f64) {
 		cameraData.position +=
 			moveDir *
 			f32(dt) *
+			cameraData.movingSpeed *
 			f32(
 				(glfw.GetKey(renderer.windowHandle, glfw.KEY_A)) -
 				(glfw.GetKey(renderer.windowHandle, glfw.KEY_D)),
@@ -153,6 +159,7 @@ camera_update :: proc(dt: f64) {
 		cameraData.position +=
 			moveDir *
 			f32(dt) *
+			cameraData.movingSpeed *
 			f32(
 				(glfw.GetKey(renderer.windowHandle, glfw.KEY_S)) -
 				(glfw.GetKey(renderer.windowHandle, glfw.KEY_W)),
@@ -164,6 +171,7 @@ camera_update :: proc(dt: f64) {
 		cameraData.position +=
 			moveDir *
 			f32(dt) *
+			cameraData.movingSpeed *
 			f32(
 				(glfw.GetKey(renderer.windowHandle, glfw.KEY_LEFT_SHIFT)) -
 				(glfw.GetKey(renderer.windowHandle, glfw.KEY_SPACE)),
@@ -178,8 +186,8 @@ camera_update :: proc(dt: f64) {
 			lastMouseY = y
 		}
 
-		dx := -(x - lastMouseX) * 0.1
-		dy := (y - lastMouseY) * 0.1
+		dx := -(x - lastMouseX) * 0.1 * f64(cameraData.dragSpeed)
+		dy := (y - lastMouseY) * 0.1 * f64(cameraData.dragSpeed)
 
 		cameraData.yaw += f32(dx)
 		cameraData.pitch += f32(dy)

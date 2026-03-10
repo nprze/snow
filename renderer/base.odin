@@ -68,13 +68,8 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_pipeline()
 	create_camera()
 	create_command_list(&renderer.commandList)
-	initialize_vbuffer(&basicTrigBuffer, 3, size_of(BasicVertex))
-	vertices := [?]BasicVertex {
-		{{0.0, 0.5, 0.0}, {1, 0, 0}},
-		{{0.5, -0.5, 0.0}, {0, 1, 0}},
-		{{-0.5, -0.5, 0.0}, {0, 0, 1}},
-	}
-	add_vertices(&basicTrigBuffer, vertices[:])
+	initialize_vbuffer(&basicTrigBuffer, 4096, size_of(BasicVertex))
+	create_UV_sphere({0, 0, 2}, 0.5, 10, 10, {0.8, 0.8, 0.9})
 	// ui specific
 	ui_init()
 }
@@ -92,18 +87,17 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		glfw.PollEvents()
 		camera_update(dt)
 		ui_begin()
-		if mu.begin_window(&muContext, "Hello Window", mu.Rect{100, 100, 300, 200}) {
-			widths := [4]i32{60, 60, 60, -1}
+		if mu.begin_window(&muContext, "settings", mu.Rect{10, 10, 350, 200}) {
+			widths := []i32{}
 			mu.layout_row(&muContext, widths[:])
 
-			mu.label(&muContext, "pos:")
-			mu.text(&muContext, fmt.tprintf("%f", cameraData.position.x))
-			mu.text(&muContext, fmt.tprintf("%f", cameraData.position.y))
-			mu.text(&muContext, fmt.tprintf("%f", cameraData.position.z))
-			mu.label(&muContext, "dir:")
-			mu.slider(&muContext, &cameraData.direction.x, -20, 20)
-			mu.slider(&muContext, &cameraData.direction.y, -20, 20)
-			mu.slider(&muContext, &cameraData.direction.z, -20, 20)
+			mu.label(&muContext, "camera options:")
+			widths2 := [2]i32{150, 150}
+			mu.layout_row(&muContext, widths2[:])
+			mu.label(&muContext, "move")
+			mu.slider(&muContext, &cameraData.movingSpeed, 0, 20)
+			mu.label(&muContext, "drag")
+			mu.slider(&muContext, &cameraData.dragSpeed, -3, 3)
 			mu.end_window(&muContext)
 		}
 		ui_end()
@@ -167,7 +161,7 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		// draw call
 		renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
 		renderer.commandList->IASetVertexBuffers(0, 1, &basicTrigBuffer.dBufferView)
-		renderer.commandList->DrawInstanced(3, 1, 0, 0)
+		renderer.commandList->DrawInstanced(u32(basicTrigBuffer.vertexCount), 1, 0, 0)
 
 		// draw ui
 		ui_render()
