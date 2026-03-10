@@ -6,6 +6,7 @@ import "core:math/linalg"
 import mem "core:mem"
 import d3d12 "vendor:directx/d3d12"
 import dxgi "vendor:directx/dxgi"
+import glfw "vendor:glfw"
 
 UniformData :: struct {
 	camera: [16]f32,
@@ -19,6 +20,8 @@ Camera :: struct {
 	aspect:              f32,
 	near:                f32,
 	far:                 f32,
+	yaw:                 f32,
+	pitch:               f32,
 	currentCameraMatrix: UniformData,
 	// dx12 stuff
 	dBuffer:             ^d3d12.IResource,
@@ -28,6 +31,9 @@ Camera :: struct {
 }
 
 cameraData: Camera
+lastMouseX: f64 = 0
+lastMouseY: f64 = 0
+firstMouseClick: bool = true
 
 create_camera :: proc() {
 	hr: d3d12.HRESULT
@@ -82,6 +88,7 @@ create_camera :: proc() {
 	cameraData.aspect = f32(renderer.displayWidth) / f32(renderer.displayHeight)
 	cameraData.near = 0.01
 	cameraData.far = 1000.0
+	cameraData.yaw = 90
 
 	recalculate_camera()
 	copy_camera_data()
@@ -127,7 +134,71 @@ copy_camera_data :: proc() {
 	cameraData.dBuffer.Unmap(cameraData.dBuffer, 0, nil)
 }
 
-camera_update :: proc() {
+camera_update :: proc(dt: f64) {
+	// movement
+	if ((glfw.GetKey(renderer.windowHandle, glfw.KEY_A) == glfw.PRESS) ||
+		   (glfw.GetKey(renderer.windowHandle, glfw.KEY_D) == glfw.PRESS)) {
+		moveDir := normalize(cross(cameraData.direction, cameraData.up))
+		cameraData.position +=
+			moveDir *
+			f32(dt) *
+			f32(
+				(glfw.GetKey(renderer.windowHandle, glfw.KEY_A)) -
+				(glfw.GetKey(renderer.windowHandle, glfw.KEY_D)),
+			)
+	}
+	if ((glfw.GetKey(renderer.windowHandle, glfw.KEY_W) == glfw.PRESS) ||
+		   (glfw.GetKey(renderer.windowHandle, glfw.KEY_S) == glfw.PRESS)) {
+		moveDir := normalize(cameraData.direction)
+		cameraData.position +=
+			moveDir *
+			f32(dt) *
+			f32(
+				(glfw.GetKey(renderer.windowHandle, glfw.KEY_S)) -
+				(glfw.GetKey(renderer.windowHandle, glfw.KEY_W)),
+			)
+	}
+	if ((glfw.GetKey(renderer.windowHandle, glfw.KEY_SPACE) == glfw.PRESS) ||
+		   (glfw.GetKey(renderer.windowHandle, glfw.KEY_LEFT_SHIFT) == glfw.PRESS)) {
+		moveDir := normalize(cameraData.up)
+		cameraData.position +=
+			moveDir *
+			f32(dt) *
+			f32(
+				(glfw.GetKey(renderer.windowHandle, glfw.KEY_LEFT_SHIFT)) -
+				(glfw.GetKey(renderer.windowHandle, glfw.KEY_SPACE)),
+			)
+	}
+	// camera direction
+	if (glfw.GetMouseButton(renderer.windowHandle, glfw.MOUSE_BUTTON_1) == glfw.PRESS) {
+		x, y := glfw.GetCursorPos(renderer.windowHandle)
+		if (firstMouseClick) {
+			firstMouseClick = false
+			lastMouseX = x
+			lastMouseY = y
+		}
+
+		dx := -(x - lastMouseX) * 0.1
+		dy := (y - lastMouseY) * 0.1
+
+		cameraData.yaw += f32(dx)
+		cameraData.pitch += f32(dy)
+
+		cameraData.pitch = clamp(cameraData.pitch, -89, 89)
+
+		cameraData.direction = {
+			math.cos(math.to_radians(cameraData.yaw)) *
+			math.cos(math.to_radians(cameraData.pitch)),
+			math.sin(math.to_radians(cameraData.pitch)),
+			math.sin(math.to_radians(cameraData.yaw)) *
+			math.cos(math.to_radians(cameraData.pitch)),
+		}
+
+		lastMouseX = x
+		lastMouseY = y
+	} else {
+		firstMouseClick = true
+	}
 	recalculate_camera()
 	copy_camera_data()
 }

@@ -2,8 +2,7 @@ package renderer
 
 import "core:fmt"
 import "core:sys/windows"
-import "core:text/table"
-import "core:unicode"
+import "core:time"
 import d3d12 "vendor:directx/d3d12"
 import d3dc "vendor:directx/d3d_compiler"
 import dxgi "vendor:directx/dxgi"
@@ -83,17 +82,24 @@ main_loop :: proc(window: glfw.WindowHandle) {
 	hr: d3d12.HRESULT
 	frame_index := renderer.swapchain->GetCurrentBackBufferIndex()
 
+	last_time := time.now()
 	for !glfw.WindowShouldClose(window) {
+		now := time.now()
+		dt := time.duration_seconds(time.diff(now, last_time))
+		last_time = now
+
 		// update
 		glfw.PollEvents()
-		camera_update()
+		camera_update(dt)
 		ui_begin()
 		if mu.begin_window(&muContext, "Hello Window", mu.Rect{100, 100, 300, 200}) {
-			mu.layout_row(&muContext, []i32{250})
+			widths := [4]i32{60, 60, 60, -1}
+			mu.layout_row(&muContext, widths[:])
+
 			mu.label(&muContext, "pos:")
-			mu.slider(&muContext, &cameraData.position.x, -2, 2)
-			mu.slider(&muContext, &cameraData.position.y, -2, 2)
-			mu.slider(&muContext, &cameraData.position.z, -2, 2)
+			mu.text(&muContext, fmt.tprintf("%f", cameraData.position.x))
+			mu.text(&muContext, fmt.tprintf("%f", cameraData.position.y))
+			mu.text(&muContext, fmt.tprintf("%f", cameraData.position.z))
 			mu.label(&muContext, "dir:")
 			mu.slider(&muContext, &cameraData.direction.x, -20, 20)
 			mu.slider(&muContext, &cameraData.direction.y, -20, 20)
