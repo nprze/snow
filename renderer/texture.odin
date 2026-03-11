@@ -15,17 +15,15 @@ Texture :: struct {
 	dSamplerHandle: d3d12.CPU_DESCRIPTOR_HANDLE,
 	dSrvHandle:     d3d12.CPU_DESCRIPTOR_HANDLE,
 }
-
+maxDescCount: u32 = 16
 samplerHeap: ^d3d12.IDescriptorHeap
-srvHeap: ^d3d12.IDescriptorHeap
 
 init_texture_loader :: proc() {
 	stbi.set_flip_vertically_on_load(1)
-	// 16 desc max
 	// sampler heap
 	sampler_heap_desc := d3d12.DESCRIPTOR_HEAP_DESC {
 		Type           = .SAMPLER,
-		NumDescriptors = 16,
+		NumDescriptors = maxDescCount,
 		Flags          = d3d12.DESCRIPTOR_HEAP_FLAGS{.SHADER_VISIBLE},
 	}
 
@@ -37,23 +35,9 @@ init_texture_loader :: proc() {
 	)
 	check(hr, "Failed to create sampler heap")
 	// SRV heap
-	srv_heap_desc := d3d12.DESCRIPTOR_HEAP_DESC {
-		Type           = .CBV_SRV_UAV,
-		NumDescriptors = 16,
-		Flags          = d3d12.DESCRIPTOR_HEAP_FLAGS{.SHADER_VISIBLE},
-	}
-
-	hr = renderer.device.CreateDescriptorHeap(
-		renderer.device,
-		&srv_heap_desc,
-		d3d12.IDescriptorHeap_UUID,
-		cast(^rawptr)&srvHeap,
-	)
-	check(hr, "Failed to create SRV heap")
 }
 cleanup_texture_loader :: proc() {
 	samplerHeap->Release()
-	srvHeap->Release()
 }
 
 load_texture :: proc(path: string, textureOut: ^Texture) {
@@ -249,7 +233,10 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 		ResourceMinLODClamp = 0,
 	}
 
-	srvHeap.GetCPUDescriptorHandleForHeapStart(srvHeap, &textureOut.dSrvHandle)
+	renderer.cbvSrvUavHeap.GetCPUDescriptorHandleForHeapStart(
+		renderer.cbvSrvUavHeap,
+		&textureOut.dSrvHandle,
+	)
 
 	renderer.device.CreateShaderResourceView(
 		renderer.device,
@@ -262,10 +249,9 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 	textureOut.dHandle = texture
 
 	// cleanup
-	/*
 	stbi.image_free(data)
 	texture_upload->Release()
-	cmdList->Release()*/
+	cmdList->Release()
 }
 cleanup_texture :: proc(texture: ^Texture) {
 	texture.dHandle->Release()

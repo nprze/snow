@@ -58,7 +58,6 @@ mouse_button_callback :: proc "c" (
 }
 
 ui_init :: proc() {
-	init_texture_loader()
 	renderer.consolasFont = load_font("renderer/fonts/consolas.txt")
 
 	mu.init(&muContext)
@@ -299,12 +298,12 @@ ui_render :: proc() {
 	renderer.commandList->SetPipelineState(renderer.uiPipeline)
 	renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
 
-	heaps := [?]^d3d12.IDescriptorHeap{srvHeap, samplerHeap}
+	heaps := [?]^d3d12.IDescriptorHeap{renderer.cbvSrvUavHeap, samplerHeap}
 
 	srv_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
 	sampler_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
 
-	srvHeap.GetGPUDescriptorHandleForHeapStart(srvHeap, &srv_gpu)
+	renderer.cbvSrvUavHeap.GetGPUDescriptorHandleForHeapStart(renderer.cbvSrvUavHeap, &srv_gpu)
 	samplerHeap.GetGPUDescriptorHandleForHeapStart(samplerHeap, &sampler_gpu)
 
 	renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])

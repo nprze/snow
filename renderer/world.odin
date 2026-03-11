@@ -8,9 +8,11 @@ BasicVertex :: struct {
 	position: Vec3,
 	normal:   Vec3,
 	color:    Vec3,
+	uv:       Vec2,
 }
 
 basicTrigBuffer: VertexBuffer
+noiseTexture: Texture
 
 read_file :: proc(path: string) -> cstring {
 	data_slice, ok := os.read_entire_file(path)
@@ -34,7 +36,21 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 		RegisterSpace                     = 0,
 		OffsetInDescriptorsFromTableStart = 0,
 	}
-	root_params: [1]d3d12.ROOT_PARAMETER
+	srv_range := d3d12.DESCRIPTOR_RANGE {
+		RangeType                         = .SRV,
+		NumDescriptors                    = 1,
+		BaseShaderRegister                = 0,
+		RegisterSpace                     = 0,
+		OffsetInDescriptorsFromTableStart = 0,
+	}
+	sampler_range := d3d12.DESCRIPTOR_RANGE {
+		RangeType                         = .SAMPLER,
+		NumDescriptors                    = 1,
+		BaseShaderRegister                = 0,
+		RegisterSpace                     = 0,
+		OffsetInDescriptorsFromTableStart = 0,
+	}
+	root_params: [3]d3d12.ROOT_PARAMETER
 
 	root_params[0] = {
 		ParameterType    = .DESCRIPTOR_TABLE,
@@ -45,8 +61,26 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 		pDescriptorRanges   = &cbv_range,
 	}
 
+	root_params[1] = {
+		ParameterType    = .DESCRIPTOR_TABLE,
+		ShaderVisibility = .PIXEL,
+	}
+	root_params[1].DescriptorTable = {
+		NumDescriptorRanges = 1,
+		pDescriptorRanges   = &srv_range,
+	}
+
+	root_params[2] = {
+		ParameterType    = .DESCRIPTOR_TABLE,
+		ShaderVisibility = .PIXEL,
+	}
+	root_params[2].DescriptorTable = {
+		NumDescriptorRanges = 1,
+		pDescriptorRanges   = &sampler_range,
+	}
+
 	desc.Desc_1_0 = {
-		NumParameters     = 1,
+		NumParameters     = 3,
 		pParameters       = &root_params[0],
 		NumStaticSamplers = 0,
 		pStaticSamplers   = nil,
@@ -87,6 +121,12 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 			SemanticName = "COLOR",
 			Format = .R32G32B32_FLOAT,
 			AlignedByteOffset = size_of(f32) * 6,
+			InputSlotClass = .PER_VERTEX_DATA,
+		},
+		{
+			SemanticName = "TEXCOORD",
+			Format = .R32G32_FLOAT,
+			AlignedByteOffset = size_of(f32) * 9,
 			InputSlotClass = .PER_VERTEX_DATA,
 		},
 	}
@@ -151,4 +191,7 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 	ps->Release()
 
 	return renderer.worldPipeline
+}
+create_noise_tex :: proc() {
+	load_texture("renderer/assets/noise.png", &noiseTexture)
 }

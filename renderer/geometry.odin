@@ -41,33 +41,30 @@ create_UV_sphere :: proc(
 	if divHArg < 3 do divH = 3
 	if divVArg < 2 do divV = 2
 
-	// each quad → 2 triangles → 6 vertices
 	tri_count := divH * divV * 2
 	verts := make([]BasicVertex, tri_count * 3)
-
-	// helper to compute a single vertex
-
 
 	idx := 0
 
 	for v := 0; v < divV; v += 1 {
 		for h := 0; h < divH; h += 1 {
-
-			// quad corners
 			p00, n00 := get_point_UV_shpere(h, v, divV, divH, pos, radius)
 			p10, n10 := get_point_UV_shpere(h + 1, v, divV, divH, pos, radius)
 			p01, n01 := get_point_UV_shpere(h, v + 1, divV, divH, pos, radius)
 			p11, n11 := get_point_UV_shpere(h + 1, v + 1, divV, divH, pos, radius)
 
-			// triangle 1
-			verts[idx + 0] = BasicVertex{p00, n00, color}
-			verts[idx + 1] = BasicVertex{p10, n10, color}
-			verts[idx + 2] = BasicVertex{p01, n01, color}
+			u0 := 0
+			v0 := 0
+			u1 := 1
+			v1 := 1
 
-			// triangle 2
-			verts[idx + 3] = BasicVertex{p10, n10, color}
-			verts[idx + 4] = BasicVertex{p11, n11, color}
-			verts[idx + 5] = BasicVertex{p01, n01, color}
+			verts[idx + 0] = BasicVertex{p00, n00, color, {1, 0}}
+			verts[idx + 1] = BasicVertex{p10, n10, color, {0, 0}}
+			verts[idx + 2] = BasicVertex{p01, n01, color, {1, 1}}
+
+			verts[idx + 3] = BasicVertex{p10, n10, color, {0, 0}}
+			verts[idx + 4] = BasicVertex{p11, n11, color, {0, 1}}
+			verts[idx + 5] = BasicVertex{p01, n01, color, {1, 1}}
 
 			idx += 6
 		}

@@ -124,15 +124,6 @@ recalculate_camera :: proc() {
 }
 
 copy_camera_data :: proc() {
-
-	// print
-	fmt.println("m:")
-	for i in 0 ..< 4 {
-		for j in 0 ..< 4 {
-			fmt.printf("%2f ", cameraData.currentCameraMatrix.camera[i * 4 + j])
-		}
-		fmt.println()
-	}
 	mapped: rawptr
 	cameraData.dBuffer.Map(cameraData.dBuffer, 0, nil, &mapped)
 	mem.copy(mapped, &cameraData.currentCameraMatrix.camera, cameraData.bufferSize)
@@ -186,8 +177,8 @@ camera_update :: proc(dt: f64) {
 			lastMouseY = y
 		}
 
-		dx := -(x - lastMouseX) * 0.1 * f64(cameraData.dragSpeed)
-		dy := (y - lastMouseY) * 0.1 * f64(cameraData.dragSpeed)
+		dx := (x - lastMouseX) * 0.1 * f64(cameraData.dragSpeed)
+		dy := -(y - lastMouseY) * 0.1 * f64(cameraData.dragSpeed)
 
 		cameraData.yaw += f32(dx)
 		cameraData.pitch += f32(dy)

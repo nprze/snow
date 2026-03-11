@@ -6,8 +6,8 @@ import glfw "vendor:glfw"
 
 main :: proc() {
 	// viewer width, viewer height
-	vw: i32 = 1600
-	vh: i32 = 800
+	vw: i32 = 1800
+	vh: i32 = 900
 	// window
 	window := ren.create_window(vw, vh)
 	defer ren.delete_window(window)
