@@ -71,7 +71,7 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_camera()
 	create_command_list(&renderer.commandList)
 	initialize_vbuffer(&basicTrigBuffer, 4096, size_of(BasicVertex))
-	create_UV_sphere({0, 0, 2}, 0.5, 10, 10, {0.8, 0.8, 0.9})
+	create_UV_sphere({0, 0, 2}, 0.5, 20, 20, {0.8, 0.8, 0.9})
 	// ui specific
 	ui_init()
 	create_noise_tex()

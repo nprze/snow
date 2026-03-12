@@ -18,25 +18,35 @@ PSInput VSMain(float3 position : POSITION0, float3 normal : NORMAL0, float3 colo
     result.uv = uv;
     return result;
 }
-
+float rand(float x)
+{
+    return frac(sin(x) * 43758.5453123);
+}
 Texture2D tex : register(t0);
 SamplerState samp : register(s0);
 float4 PSMain(PSInput input) : SV_TARGET {
     float3 lightPosition = {0,3,0};
-    float3 lightColor = {0.5,0.5,1};
-    
-    float3 norm = normalize(input.normal);
+    float3 lightColor = {0.4, 0.4, 0.7};
+
+    float3 sampled = tex.Sample(samp, input.uv);
+    float3 noise = length(sampled);
+    float random = noise * 2 * 3.14;
+
+    float3 normal = normalize(input.normal);
+    float3 tangent = normalize(cross(normal, float3(0,1,0)));
+    float3 bitangent = normalize(cross(normal, tangent));
+
+    float toAddVector = normalize(tangent * cos(random) + bitangent * sin(random)) * 0.1 * noise;
+
+    float3 flucNormal = normalize(normal+toAddVector);
+
     float3 toLight = normalize(lightPosition - input.pos);
     
     
-    float specular = pow(max(dot(toLight, norm), 0), 32) * 0.5;
-    float3 diffuse = lightColor * max(dot(toLight, norm), 0) * 0.4;
-    float3 ambient = norm * 0.3;
-
-    
-    float4 sampled = tex.Sample(samp, input.uv);
-    return sampled;
+    float specular = pow(max(dot(toLight, flucNormal), 0), 32) * 0.5;
+    float3 diffuse = lightColor * max(dot(toLight, flucNormal), 0) * 0.4;
+    float3 ambient = input.color * 0.8 * (0.1 * noise.x +0.9);
 
     //return float4(input.uv.x, input.uv.y, 1.0, 1.0);
-    //return float4(float3(specular, specular, specular) + ambient + diffuse, 1.0);
+    return float4(float3(specular, specular, specular) + ambient + diffuse, 1.0);
 };

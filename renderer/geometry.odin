@@ -11,6 +11,7 @@ get_point_UV_shpere := proc(
 ) -> (
 	Vec3,
 	Vec3,
+	Vec2,
 ) {
 	using math
 	t_h := f32(h) / f32(divH)
@@ -25,8 +26,9 @@ get_point_UV_shpere := proc(
 	x := sin_phi * cos(theta)
 	y := cos_phi
 	z := sin_phi * sin(theta)
+	uv := Vec2{t_h, t_v}
 
-	return Vec3{pos[0] + x * radius, pos[1] + y * radius, pos[2] + z * radius}, Vec3{x, y, z}
+	return Vec3{pos[0] + x * radius, pos[1] + y * radius, pos[2] + z * radius}, Vec3{x, y, z}, uv
 }
 create_UV_sphere :: proc(
 	pos: Vec3,
@@ -48,23 +50,18 @@ create_UV_sphere :: proc(
 
 	for v := 0; v < divV; v += 1 {
 		for h := 0; h < divH; h += 1 {
-			p00, n00 := get_point_UV_shpere(h, v, divV, divH, pos, radius)
-			p10, n10 := get_point_UV_shpere(h + 1, v, divV, divH, pos, radius)
-			p01, n01 := get_point_UV_shpere(h, v + 1, divV, divH, pos, radius)
-			p11, n11 := get_point_UV_shpere(h + 1, v + 1, divV, divH, pos, radius)
+			p00, n00, uv00 := get_point_UV_shpere(h, v, divV, divH, pos, radius)
+			p10, n10, uv10 := get_point_UV_shpere(h + 1, v, divV, divH, pos, radius)
+			p01, n01, uv01 := get_point_UV_shpere(h, v + 1, divV, divH, pos, radius)
+			p11, n11, uv11 := get_point_UV_shpere(h + 1, v + 1, divV, divH, pos, radius)
 
-			u0 := 0
-			v0 := 0
-			u1 := 1
-			v1 := 1
+			verts[idx + 0] = BasicVertex{p00, n00, color, uv00}
+			verts[idx + 1] = BasicVertex{p10, n10, color, uv10}
+			verts[idx + 2] = BasicVertex{p01, n01, color, uv01}
 
-			verts[idx + 0] = BasicVertex{p00, n00, color, {1, 0}}
-			verts[idx + 1] = BasicVertex{p10, n10, color, {0, 0}}
-			verts[idx + 2] = BasicVertex{p01, n01, color, {1, 1}}
-
-			verts[idx + 3] = BasicVertex{p10, n10, color, {0, 0}}
-			verts[idx + 4] = BasicVertex{p11, n11, color, {0, 1}}
-			verts[idx + 5] = BasicVertex{p01, n01, color, {1, 1}}
+			verts[idx + 3] = BasicVertex{p10, n10, color, uv10}
+			verts[idx + 4] = BasicVertex{p11, n11, color, uv11}
+			verts[idx + 5] = BasicVertex{p01, n01, color, uv01}
 
 			idx += 6
 		}

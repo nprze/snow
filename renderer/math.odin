@@ -1,13 +1,7 @@
 package renderer
-import "core:fmt"
 import "core:math"
-import "core:mem"
 
-Vec2 :: struct {
-	x: f32,
-	y: f32,
-}
-
+Vec2 :: [2]f32
 Vec3 :: [3]f32
 Vec4 :: [4]f32
 Mat4 :: matrix[4, 4]f32

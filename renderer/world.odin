@@ -186,5 +186,5 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 	return renderer.worldPipeline
 }
 create_noise_tex :: proc() {
-	load_texture("renderer/assets/noise.png", &noiseTexture)
+	load_texture("renderer/assets/noise1.jpg", &noiseTexture)
 }
