@@ -1,3 +1,4 @@
-# Anim
+# snow
 
-A simple playground for animation. constraints in progress
+snow simulation wip.\
+done: snow material :D
