@@ -298,12 +298,12 @@ ui_render :: proc() {
 	renderer.commandList->SetPipelineState(renderer.uiPipeline)
 	renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
 
-	heaps := [?]^d3d12.IDescriptorHeap{renderer.cbvSrvUavHeap, samplerHeap}
+	heaps := [?]^d3d12.IDescriptorHeap{textureHeap, samplerHeap}
 
 	srv_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
 	sampler_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
 
-	renderer.cbvSrvUavHeap.GetGPUDescriptorHandleForHeapStart(renderer.cbvSrvUavHeap, &srv_gpu)
+	textureHeap->GetGPUDescriptorHandleForHeapStart(&srv_gpu)
 	samplerHeap.GetGPUDescriptorHandleForHeapStart(samplerHeap, &sampler_gpu)
 
 	renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])

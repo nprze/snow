@@ -17,6 +17,10 @@ Texture :: struct {
 }
 maxDescCount: u32 = 16
 samplerHeap: ^d3d12.IDescriptorHeap
+textureHeap: ^d3d12.IDescriptorHeap
+srvSize: u32
+samplerSize: u32
+nestSrvSamplerIndex: u32 = 0
 
 init_texture_loader :: proc() {
 	stbi.set_flip_vertically_on_load(1)
@@ -35,6 +39,28 @@ init_texture_loader :: proc() {
 	)
 	check(hr, "Failed to create sampler heap")
 	// SRV heap
+	srv_heap_desc := d3d12.DESCRIPTOR_HEAP_DESC {
+		Type           = .CBV_SRV_UAV,
+		NumDescriptors = maxDescCount,
+		Flags          = d3d12.DESCRIPTOR_HEAP_FLAGS{.SHADER_VISIBLE},
+	}
+
+	hr = renderer.device.CreateDescriptorHeap(
+		renderer.device,
+		&srv_heap_desc,
+		d3d12.IDescriptorHeap_UUID,
+		cast(^rawptr)&textureHeap,
+	)
+	check(hr, "Failed to create SRV heap")
+	// sizes
+	srvSize = renderer.device.GetDescriptorHandleIncrementSize(
+		renderer.device,
+		d3d12.DESCRIPTOR_HEAP_TYPE.CBV_SRV_UAV,
+	)
+	samplerSize = renderer.device.GetDescriptorHandleIncrementSize(
+		renderer.device,
+		d3d12.DESCRIPTOR_HEAP_TYPE.SAMPLER,
+	)
 }
 cleanup_texture_loader :: proc() {
 	samplerHeap->Release()
@@ -216,7 +242,13 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 		MinLOD         = 0,
 		MaxLOD         = d3d12.FLOAT32_MAX,
 	}
-	samplerHeap.GetCPUDescriptorHandleForHeapStart(samplerHeap, &textureOut.dSamplerHandle)
+	base_sampler_cpu: d3d12.CPU_DESCRIPTOR_HANDLE
+	samplerHeap.GetCPUDescriptorHandleForHeapStart(samplerHeap, &base_sampler_cpu)
+
+	sampler_handle := base_sampler_cpu
+	sampler_handle.ptr += uint(uintptr(nestSrvSamplerIndex) * uintptr(samplerSize))
+
+	textureOut.dSamplerHandle = sampler_handle
 
 	renderer.device.CreateSampler(renderer.device, &sampler_desc, textureOut.dSamplerHandle)
 
@@ -233,10 +265,13 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 		ResourceMinLODClamp = 0,
 	}
 
-	renderer.cbvSrvUavHeap.GetCPUDescriptorHandleForHeapStart(
-		renderer.cbvSrvUavHeap,
-		&textureOut.dSrvHandle,
-	)
+	base_srv_cpu: d3d12.CPU_DESCRIPTOR_HANDLE
+	textureHeap->GetCPUDescriptorHandleForHeapStart(&base_srv_cpu)
+
+	srv_handle := base_srv_cpu
+	srv_handle.ptr += uint(uintptr(nestSrvSamplerIndex) * uintptr(srvSize))
+
+	textureOut.dSrvHandle = srv_handle
 
 	renderer.device.CreateShaderResourceView(
 		renderer.device,
@@ -247,6 +282,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 
 	// output
 	textureOut.dHandle = texture
+	nestSrvSamplerIndex += 1
 
 	// cleanup
 	stbi.image_free(data)

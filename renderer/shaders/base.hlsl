@@ -33,6 +33,10 @@ float4 PSMain(PSInput input) : SV_TARGET {
     float3 diffuse = lightColor * max(dot(toLight, norm), 0) * 0.4;
     float3 ambient = norm * 0.3;
 
-    return float4(input.uv.x, input.uv.y, 1.0, 1.0);
+    
+    float4 sampled = tex.Sample(samp, input.uv);
+    return sampled;
+
+    //return float4(input.uv.x, input.uv.y, 1.0, 1.0);
     //return float4(float3(specular, specular, specular) + ambient + diffuse, 1.0);
 };

@@ -29,13 +29,6 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 	desc := d3d12.VERSIONED_ROOT_SIGNATURE_DESC {
 		Version = ._1_0,
 	}
-	cbv_range := d3d12.DESCRIPTOR_RANGE {
-		RangeType                         = .CBV,
-		NumDescriptors                    = 1,
-		BaseShaderRegister                = 0,
-		RegisterSpace                     = 0,
-		OffsetInDescriptorsFromTableStart = 0,
-	}
 	srv_range := d3d12.DESCRIPTOR_RANGE {
 		RangeType                         = .SRV,
 		NumDescriptors                    = 1,
@@ -53,12 +46,12 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 	root_params: [3]d3d12.ROOT_PARAMETER
 
 	root_params[0] = {
-		ParameterType    = .DESCRIPTOR_TABLE,
+		ParameterType    = .CBV,
 		ShaderVisibility = .VERTEX,
 	}
-	root_params[0].DescriptorTable = {
-		NumDescriptorRanges = 1,
-		pDescriptorRanges   = &cbv_range,
+	root_params[0].Descriptor = {
+		ShaderRegister = 0,
+		RegisterSpace  = 0,
 	}
 
 	root_params[1] = {

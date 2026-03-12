@@ -30,7 +30,6 @@ Renderer :: struct {
 	swapchain:            ^dxgi.ISwapChain3,
 	commandAllocator:     ^d3d12.ICommandAllocator,
 	commandList:          ^d3d12.IGraphicsCommandList,
-	cbvSrvUavHeap:        ^d3d12.IDescriptorHeap,
 	// world
 	worldPipeline:        ^d3d12.IPipelineState,
 	rootSignature:        ^d3d12.IRootSignature,
@@ -73,9 +72,9 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_command_list(&renderer.commandList)
 	initialize_vbuffer(&basicTrigBuffer, 4096, size_of(BasicVertex))
 	create_UV_sphere({0, 0, 2}, 0.5, 10, 10, {0.8, 0.8, 0.9})
-	create_noise_tex()
 	// ui specific
 	ui_init()
+	create_noise_tex()
 }
 main_loop :: proc(window: glfw.WindowHandle) {
 	hr: d3d12.HRESULT
@@ -157,21 +156,25 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		renderer.commandList->ClearRenderTargetView(rtv_handle, &clearcolor, 0, nil)
 
 		// bind descriptors
-		heaps := [?]^d3d12.IDescriptorHeap{renderer.cbvSrvUavHeap, samplerHeap}
+		heaps := [?]^d3d12.IDescriptorHeap{textureHeap, samplerHeap}
 
-		combo_desc_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
-		sampler_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
+		camera_gpu: d3d12.GPU_VIRTUAL_ADDRESS
+		base_sbv_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
+		base_sampler_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
 
-		renderer.cbvSrvUavHeap.GetGPUDescriptorHandleForHeapStart(
-			renderer.cbvSrvUavHeap,
-			&combo_desc_gpu,
-		)
-		samplerHeap.GetGPUDescriptorHandleForHeapStart(samplerHeap, &sampler_gpu)
+		camera_gpu = cameraData.dBuffer->GetGPUVirtualAddress()
+		textureHeap->GetGPUDescriptorHandleForHeapStart(&base_sbv_gpu)
+		srv_gpu := base_sbv_gpu
+		srv_gpu.ptr += u64(1) * u64(srvSize)
+		samplerHeap->GetGPUDescriptorHandleForHeapStart(&base_sampler_gpu)
+		sampler_gpu := base_sampler_gpu
+		sampler_gpu.ptr += u64(1) * u64(samplerSize)
 
 		renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])
-		renderer.commandList->SetGraphicsRootDescriptorTable(0, combo_desc_gpu)
-		renderer.commandList->SetGraphicsRootDescriptorTable(1, combo_desc_gpu)
+		renderer.commandList->SetGraphicsRootConstantBufferView(0, camera_gpu)
+		renderer.commandList->SetGraphicsRootDescriptorTable(1, srv_gpu)
 		renderer.commandList->SetGraphicsRootDescriptorTable(2, sampler_gpu)
+
 
 		// draw call
 		renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
@@ -410,19 +413,6 @@ create_command_list :: proc(
 	return commandListOut
 }
 create_cbv_srv_uav_heap :: proc() {
-	srv_heap_desc := d3d12.DESCRIPTOR_HEAP_DESC {
-		Type           = .CBV_SRV_UAV,
-		NumDescriptors = maxDescCount,
-		Flags          = d3d12.DESCRIPTOR_HEAP_FLAGS{.SHADER_VISIBLE},
-	}
-
-	hr := renderer.device.CreateDescriptorHeap(
-		renderer.device,
-		&srv_heap_desc,
-		d3d12.IDescriptorHeap_UUID,
-		cast(^rawptr)&renderer.cbvSrvUavHeap,
-	)
-	check(hr, "Failed to create SRV heap")
 
 }
 fetch_render_targets :: proc() -> d3d12.CPU_DESCRIPTOR_HANDLE {
