@@ -24,6 +24,56 @@ read_file :: proc(path: string) -> cstring {
 	data[len(data_slice)] = 0
 	return cstring(&data[0])
 }
+create_depth_buffer :: proc() {
+	// desc heap
+	hr: d3d12.HRESULT
+	desc := d3d12.DESCRIPTOR_HEAP_DESC {
+		NumDescriptors = RENDERTARGETS_COUNT,
+		Type           = .DSV,
+		Flags          = {},
+	}
+
+	hr = renderer.device->CreateDescriptorHeap(
+		&desc,
+		d3d12.IDescriptorHeap_UUID,
+		(^rawptr)(&renderer.dsvDescriptorHeap),
+	)
+	check(hr, "Failed creating depth stencil descriptor heap")
+
+	// buffer
+	heap_props := d3d12.HEAP_PROPERTIES {
+		Type = .DEFAULT,
+	}
+	depthDesc: d3d12.RESOURCE_DESC = {
+		Dimension = .TEXTURE2D,
+		Width = u64(renderer.displayWidth),
+		Height = renderer.displayHeight,
+		DepthOrArraySize = 1,
+		MipLevels = 1,
+		Format = .D32_FLOAT,
+		SampleDesc = {Count = 1},
+		Flags = d3d12.RESOURCE_FLAGS{.ALLOW_DEPTH_STENCIL},
+	}
+	clearValue: d3d12.CLEAR_VALUE = {
+		Format = .D32_FLOAT,
+		DepthStencil = d3d12.DEPTH_STENCIL_VALUE{Depth = 1, Stencil = 0},
+	}
+
+	hr = renderer.device->CreateCommittedResource(
+		&heap_props,
+		{},
+		&depthDesc,
+		d3d12.RESOURCE_STATES{.DEPTH_WRITE},
+		&clearValue,
+		d3d12.IResource_UUID,
+		(^rawptr)(&renderer.depthBuffer),
+	)
+	check(hr, "Failed to create depth buffer")
+
+	handle: d3d12.CPU_DESCRIPTOR_HANDLE
+	renderer.dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&handle)
+	renderer.device->CreateDepthStencilView(renderer.depthBuffer, nil, handle)
+}
 create_root_signature :: proc() -> ^d3d12.IRootSignature {
 	hr: d3d12.HRESULT
 	desc := d3d12.VERSIONED_ROOT_SIGNATURE_DESC {
@@ -150,7 +200,7 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 		SampleMask = 0xFFFFFFFF,
 		RasterizerState = {
 			FillMode = .SOLID,
-			CullMode = .FRONT,
+			CullMode = .NONE,
 			FrontCounterClockwise = false,
 			DepthBias = 0,
 			DepthBiasClamp = 0,
@@ -161,7 +211,12 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 			ForcedSampleCount = 0,
 			ConservativeRaster = .OFF,
 		},
-		DepthStencilState = {DepthEnable = false, StencilEnable = false},
+		DepthStencilState = {
+			DepthEnable = true,
+			DepthWriteMask = d3d12.DEPTH_WRITE_MASK.ALL,
+			DepthFunc = d3d12.COMPARISON_FUNC.LESS,
+			StencilEnable = false,
+		},
 		InputLayout = {
 			pInputElementDescs = &vertex_format[0],
 			NumElements = u32(len(vertex_format)),
@@ -169,7 +224,7 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 		PrimitiveTopologyType = .TRIANGLE,
 		NumRenderTargets = 1,
 		RTVFormats = {0 = .R8G8B8A8_UNORM, 1 ..< 7 = .UNKNOWN},
-		DSVFormat = .UNKNOWN,
+		DSVFormat = .D32_FLOAT,
 		SampleDesc = {Count = 1, Quality = 0},
 	}
 

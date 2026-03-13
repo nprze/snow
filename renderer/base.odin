@@ -18,10 +18,12 @@ Fence :: struct {
 }
 
 Renderer :: struct {
+	// utils
 	displayWidth:         u32,
 	displayHeight:        u32,
 	oneOverDisplayWidth:  f32,
 	oneOverDisplayHeight: f32,
+	// general
 	windowHandle:         glfw.WindowHandle,
 	factory:              ^dxgi.IFactory4,
 	adapter:              ^dxgi.IAdapter1,
@@ -30,6 +32,12 @@ Renderer :: struct {
 	swapchain:            ^dxgi.ISwapChain3,
 	commandAllocator:     ^d3d12.ICommandAllocator,
 	commandList:          ^d3d12.IGraphicsCommandList,
+	renderTargets:        [RENDERTARGETS_COUNT]^d3d12.IResource,
+	renderFinishedFence:  Fence,
+	rsvDescriptorHeap:    ^d3d12.IDescriptorHeap,
+	// world depth
+	dsvDescriptorHeap:    ^d3d12.IDescriptorHeap,
+	depthBuffer:          ^d3d12.IResource,
 	// world
 	worldPipeline:        ^d3d12.IPipelineState,
 	rootSignature:        ^d3d12.IRootSignature,
@@ -38,9 +46,6 @@ Renderer :: struct {
 	uiRootSignature:      ^d3d12.IRootSignature,
 	uiVertexBuffer:       VertexBuffer,
 	consolasFont:         Font,
-	renderTargets:        [RENDERTARGETS_COUNT]^d3d12.IResource,
-	descriptorHeap:       ^d3d12.IDescriptorHeap,
-	renderFinishedFence:  Fence,
 }
 
 renderer: Renderer
@@ -67,11 +72,13 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	init_texture_loader()
 	// world pipeline specific
 	create_root_signature()
+	create_depth_buffer()
 	create_pipeline()
 	create_camera()
 	create_command_list(&renderer.commandList)
 	initialize_vbuffer(&basicTrigBuffer, 4096, size_of(BasicVertex))
 	create_UV_sphere({0, 0, 2}, 0.5, 20, 20, {0.8, 0.8, 0.9})
+	create_rect({0, -2, 0}, {0, 1, 0}, {1, 1, 1}, 2)
 	// ui specific
 	ui_init()
 	create_noise_tex()
@@ -142,18 +149,28 @@ main_loop :: proc(window: glfw.WindowHandle) {
 		renderer.commandList->ResourceBarrier(1, &to_render_target_barrier)
 
 		rtv_handle: d3d12.CPU_DESCRIPTOR_HANDLE
-		renderer.descriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_handle)
+		renderer.rsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_handle)
 
 		if (frame_index > 0) {
 			s := renderer.device->GetDescriptorHandleIncrementSize(.RTV)
 			rtv_handle.ptr += uint(frame_index * s)
 		}
+		depthHandle: d3d12.CPU_DESCRIPTOR_HANDLE
+		renderer.dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&depthHandle)
 
-		renderer.commandList->OMSetRenderTargets(1, &rtv_handle, false, nil)
+		renderer.commandList->OMSetRenderTargets(1, &rtv_handle, false, &depthHandle)
 
 		// clear backbuffer
 		clearcolor := [?]f32{0.05, 0.05, 0.05, 1.0}
 		renderer.commandList->ClearRenderTargetView(rtv_handle, &clearcolor, 0, nil)
+		renderer.commandList->ClearDepthStencilView(
+			depthHandle,
+			d3d12.CLEAR_FLAGS{.DEPTH},
+			1,
+			0,
+			0,
+			nil,
+		)
 
 		// bind descriptors
 		heaps := [?]^d3d12.IDescriptorHeap{textureHeap, samplerHeap}
@@ -241,7 +258,7 @@ cleanup_renderer :: proc() {
 	for i: u32 = 0; i < RENDERTARGETS_COUNT; i += 1 {
 		renderer.renderTargets[i]->Release()
 	}
-	renderer.descriptorHeap->Release()
+	renderer.rsvDescriptorHeap->Release()
 	renderer.swapchain->Release()
 	renderer.queue->Release()
 	renderer.commandAllocator->Release()
@@ -390,10 +407,10 @@ create_rtv_descriptor_heap :: proc() -> ^d3d12.IDescriptorHeap {
 	hr = renderer.device->CreateDescriptorHeap(
 		&desc,
 		d3d12.IDescriptorHeap_UUID,
-		(^rawptr)(&renderer.descriptorHeap),
+		(^rawptr)(&renderer.rsvDescriptorHeap),
 	)
 	check(hr, "Failed creating descriptor heap")
-	return renderer.descriptorHeap
+	return renderer.rsvDescriptorHeap
 }
 create_command_list :: proc(
 	commandListOut: ^^d3d12.IGraphicsCommandList,
@@ -420,7 +437,7 @@ fetch_render_targets :: proc() -> d3d12.CPU_DESCRIPTOR_HANDLE {
 	rtv_descriptor_size: u32 = renderer.device->GetDescriptorHandleIncrementSize(.RTV)
 
 	rtv_descriptor_handle: d3d12.CPU_DESCRIPTOR_HANDLE
-	renderer.descriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_descriptor_handle)
+	renderer.rsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_descriptor_handle)
 
 	for i: u32 = 0; i < RENDERTARGETS_COUNT; i += 1 {
 		hr = renderer.swapchain->GetBuffer(

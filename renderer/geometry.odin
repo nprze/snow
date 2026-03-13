@@ -1,7 +1,9 @@
 package renderer
 
 import math "core:math"
-get_point_UV_shpere := proc(
+import "core:text/match"
+
+get_point_UV_shpere :: proc(
 	h: int,
 	v: int,
 	divV: int,
@@ -56,15 +58,46 @@ create_UV_sphere :: proc(
 			p11, n11, uv11 := get_point_UV_shpere(h + 1, v + 1, divV, divH, pos, radius)
 
 			verts[idx + 0] = BasicVertex{p00, n00, color, uv00}
-			verts[idx + 1] = BasicVertex{p10, n10, color, uv10}
-			verts[idx + 2] = BasicVertex{p01, n01, color, uv01}
+			verts[idx + 1] = BasicVertex{p01, n01, color, uv01}
+			verts[idx + 2] = BasicVertex{p10, n10, color, uv10}
 
 			verts[idx + 3] = BasicVertex{p10, n10, color, uv10}
-			verts[idx + 4] = BasicVertex{p11, n11, color, uv11}
-			verts[idx + 5] = BasicVertex{p01, n01, color, uv01}
+			verts[idx + 4] = BasicVertex{p01, n01, color, uv01}
+			verts[idx + 5] = BasicVertex{p11, n11, color, uv11}
 
 			idx += 6
 		}
 	}
+	add_vertices(&basicTrigBuffer, verts[:])
+}
+create_rect :: proc(middle: Vec3, normal: Vec3, color: Vec3, halfSideLenght: f32) {
+	tangent: Vec3
+	if (abs(normal.x) > abs(normal.z)) {
+		tangent = normalize(Vec3{-normal.y, normal.x, 0.0})
+	} else {
+		tangent = normalize(Vec3{0, -normal.z, normal.y})
+	}
+	bitangent := cross(normal, tangent)
+
+	verts := make([]BasicVertex, 6)
+
+	p00 := middle + (tangent * halfSideLenght) + (bitangent * halfSideLenght)
+	p10 := middle - (tangent * halfSideLenght) + (bitangent * halfSideLenght)
+	p01 := middle + (tangent * halfSideLenght) - (bitangent * halfSideLenght)
+	p11 := middle - (tangent * halfSideLenght) - (bitangent * halfSideLenght)
+
+	uv00: Vec2 = {0, 0}
+	uv10: Vec2 = {1, 0}
+	uv01: Vec2 = {0, 1}
+	uv11: Vec2 = {1, 1}
+
+	verts[0] = BasicVertex{p00, normal, color, uv00}
+	verts[1] = BasicVertex{p01, normal, color, uv01}
+	verts[2] = BasicVertex{p10, normal, color, uv10}
+
+	verts[3] = BasicVertex{p10, normal, color, uv10}
+	verts[4] = BasicVertex{p01, normal, color, uv01}
+	verts[5] = BasicVertex{p11, normal, color, uv11}
+
 	add_vertices(&basicTrigBuffer, verts[:])
 }
