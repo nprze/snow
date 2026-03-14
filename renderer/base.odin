@@ -24,6 +24,7 @@ Renderer :: struct {
 	oneOverDisplayWidth:  f32,
 	oneOverDisplayHeight: f32,
 	// general
+	debug:                ^d3d12.IDebug,
 	windowHandle:         glfw.WindowHandle,
 	factory:              ^dxgi.IFactory4,
 	adapter:              ^dxgi.IAdapter1,
@@ -35,6 +36,7 @@ Renderer :: struct {
 	renderTargets:        [RENDERTARGETS_COUNT]^d3d12.IResource,
 	renderFinishedFence:  Fence,
 	rsvDescriptorHeap:    ^d3d12.IDescriptorHeap,
+	frameIndex:           u32,
 	// world depth
 	dsvDescriptorHeap:    ^d3d12.IDescriptorHeap,
 	depthBuffer:          ^d3d12.IResource,
@@ -70,6 +72,7 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_command_allocator()
 	create_fence(&renderer.renderFinishedFence)
 	init_texture_loader()
+	renderer.frameIndex = renderer.swapchain->GetCurrentBackBufferIndex()
 	// world pipeline specific
 	create_root_signature()
 	create_depth_buffer()
@@ -82,192 +85,194 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	// ui specific
 	ui_init()
 	create_noise_tex()
+
 }
-main_loop :: proc(window: glfw.WindowHandle) {
-	hr: d3d12.HRESULT
-	frame_index := renderer.swapchain->GetCurrentBackBufferIndex()
-
-	last_time := time.now()
-	for !glfw.WindowShouldClose(window) {
-		now := time.now()
-		dt := time.duration_seconds(time.diff(now, last_time))
-		last_time = now
-
-		// update
-		glfw.PollEvents()
-		camera_update(dt)
-		ui_begin()
-		if mu.begin_window(&muContext, "settings", mu.Rect{10, 10, 350, 200}) {
-			widths := []i32{}
-			mu.layout_row(&muContext, widths[:])
-
-			mu.label(&muContext, "camera options:")
-			widths2 := [2]i32{150, 150}
-			mu.layout_row(&muContext, widths2[:])
-			mu.label(&muContext, "move")
-			mu.slider(&muContext, &cameraData.movingSpeed, 0, 20)
-			mu.label(&muContext, "drag")
-			mu.slider(&muContext, &cameraData.dragSpeed, -3, 3)
-			mu.end_window(&muContext)
-		}
-		ui_end()
-		// render
-		hr = renderer.commandAllocator->Reset()
-		check(hr, "Failed resetting command allocator")
-
-		viewport := d3d12.VIEWPORT {
-			Width  = f32(renderer.displayWidth),
-			Height = f32(renderer.displayHeight),
-		}
-
-		scissor_rect := d3d12.RECT {
-			left   = 0,
-			right  = i32(renderer.displayWidth),
-			top    = 0,
-			bottom = i32(renderer.displayHeight),
-		}
-
-		hr = renderer.commandList->Reset(renderer.commandAllocator, renderer.worldPipeline)
-		check(hr, "Failed to reset command list")
-
-		renderer.commandList->SetGraphicsRootSignature(renderer.rootSignature)
-		renderer.commandList->RSSetViewports(1, &viewport)
-		renderer.commandList->RSSetScissorRects(1, &scissor_rect)
-
-		to_render_target_barrier := d3d12.RESOURCE_BARRIER {
-			Type  = .TRANSITION,
-			Flags = {},
-		}
-
-		to_render_target_barrier.Transition = {
-			pResource   = renderer.renderTargets[frame_index],
-			StateBefore = d3d12.RESOURCE_STATE_PRESENT,
-			StateAfter  = {.RENDER_TARGET},
-			Subresource = d3d12.RESOURCE_BARRIER_ALL_SUBRESOURCES,
-		}
-
-		renderer.commandList->ResourceBarrier(1, &to_render_target_barrier)
-
-		rtv_handle: d3d12.CPU_DESCRIPTOR_HANDLE
-		renderer.rsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_handle)
-
-		if (frame_index > 0) {
-			s := renderer.device->GetDescriptorHandleIncrementSize(.RTV)
-			rtv_handle.ptr += uint(frame_index * s)
-		}
-		depthHandle: d3d12.CPU_DESCRIPTOR_HANDLE
-		renderer.dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&depthHandle)
-
-		renderer.commandList->OMSetRenderTargets(1, &rtv_handle, false, &depthHandle)
-
-		// clear backbuffer
-		clearcolor := [?]f32{0.05, 0.05, 0.05, 1.0}
-		renderer.commandList->ClearRenderTargetView(rtv_handle, &clearcolor, 0, nil)
-		renderer.commandList->ClearDepthStencilView(
-			depthHandle,
-			d3d12.CLEAR_FLAGS{.DEPTH},
-			1,
-			0,
-			0,
-			nil,
-		)
-
-		// bind descriptors
-		heaps := [?]^d3d12.IDescriptorHeap{textureHeap, samplerHeap}
-
-		camera_gpu: d3d12.GPU_VIRTUAL_ADDRESS
-		base_sbv_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
-		base_sampler_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
-
-		camera_gpu = cameraData.dBuffer->GetGPUVirtualAddress()
-		textureHeap->GetGPUDescriptorHandleForHeapStart(&base_sbv_gpu)
-		srv_gpu := base_sbv_gpu
-		srv_gpu.ptr += u64(1) * u64(srvSize)
-		samplerHeap->GetGPUDescriptorHandleForHeapStart(&base_sampler_gpu)
-		sampler_gpu := base_sampler_gpu
-		sampler_gpu.ptr += u64(1) * u64(samplerSize)
-
-		renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])
-		renderer.commandList->SetGraphicsRootConstantBufferView(0, camera_gpu)
-		renderer.commandList->SetGraphicsRootDescriptorTable(1, srv_gpu)
-		renderer.commandList->SetGraphicsRootDescriptorTable(2, sampler_gpu)
-
-
-		// draw call
-		renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
-		renderer.commandList->IASetVertexBuffers(0, 1, &basicTrigBuffer.dBufferView)
-		renderer.commandList->DrawInstanced(u32(basicTrigBuffer.vertexCount), 1, 0, 0)
-
-		// draw ui
-		ui_render()
-
-		to_present_barrier := to_render_target_barrier
-		to_present_barrier.Transition.StateBefore = {.RENDER_TARGET}
-		to_present_barrier.Transition.StateAfter = d3d12.RESOURCE_STATE_PRESENT
-
-		renderer.commandList->ResourceBarrier(1, &to_present_barrier)
-
-		hr = renderer.commandList->Close()
-		check(hr, "Failed to close command list")
-
-		// execute
-		cmdlists := [?]^d3d12.IGraphicsCommandList{renderer.commandList}
-		renderer.queue->ExecuteCommandLists(len(cmdlists), (^^d3d12.ICommandList)(&cmdlists[0]))
-
-		// present
-		{
-			flags: dxgi.PRESENT
-			params: dxgi.PRESENT_PARAMETERS
-			hr = renderer.swapchain->Present1(1, flags, &params)
-			check(hr, "Present failed")
-		}
-
-		// wait for frame to finish
-		{
-			current_fence_value := renderer.renderFinishedFence.fenceValue
-
-			hr = renderer.queue->Signal(renderer.renderFinishedFence.dFence, current_fence_value)
-			check(hr, "Failed to signal fence")
-
-			renderer.renderFinishedFence.fenceValue += 1
-			completed := renderer.renderFinishedFence.dFence->GetCompletedValue()
-
-			if completed < current_fence_value {
-				hr = renderer.renderFinishedFence.dFence->SetEventOnCompletion(
-					current_fence_value,
-					renderer.renderFinishedFence.fenceEvent,
-				)
-				check(hr, "Failed to set event on completion flag")
-				windows.WaitForSingleObject(
-					renderer.renderFinishedFence.fenceEvent,
-					windows.INFINITE,
-				)
-			}
-
-			frame_index = renderer.swapchain->GetCurrentBackBufferIndex()
-		}
-	}
-}
-
 cleanup_renderer :: proc() {
+	// wait
+	renderer.renderFinishedFence.fenceValue += 1
+	renderer.queue->Signal(
+		renderer.renderFinishedFence.dFence,
+		renderer.renderFinishedFence.fenceValue,
+	)
+	renderer.renderFinishedFence.dFence->SetEventOnCompletion(
+		renderer.renderFinishedFence.fenceValue,
+		renderer.renderFinishedFence.fenceEvent,
+	)
+	windows.WaitForSingleObject(renderer.renderFinishedFence.fenceEvent, windows.INFINITE)
+	// cam
+	cleanup_camera()
+	// ui
+	ui_cleanup()
+	// main
 	cleanup_vbuffer(&basicTrigBuffer)
-	renderer.commandList->Release()
 	renderer.worldPipeline->Release()
 	renderer.rootSignature->Release()
-	ui_cleanup()
+	cleanup_texture(&noiseTexture)
+	// depth
+	renderer.depthBuffer->Release()
+	renderer.dsvDescriptorHeap->Release()
 	for i: u32 = 0; i < RENDERTARGETS_COUNT; i += 1 {
 		renderer.renderTargets[i]->Release()
 	}
 	renderer.rsvDescriptorHeap->Release()
+	renderer.commandList->Release()
+	renderer.commandAllocator->Release()
 	renderer.swapchain->Release()
 	renderer.queue->Release()
-	renderer.commandAllocator->Release()
+	debugDevice: ^d3d12.IDebugDevice
+	renderer.device->QueryInterface(d3d12.IDebugDevice_UUID, cast(^rawptr)&debugDevice)
 	renderer.device->Release()
 	renderer.adapter->Release()
 	renderer.factory->Release()
 	cleanup_fence(&renderer.renderFinishedFence)
+	if (debugDevice != nil) {
+		debugDevice->ReportLiveDeviceObjects({.DETAIL})
+	}
+	renderer.debug->Release()
 }
+before_update :: proc() {
+	glfw.PollEvents()
+	ui_begin()
+}
+post_update :: proc() {
+	ui_end()
+}
+render_all :: proc(ctx: UpdateContext) {
+	hr: d3d12.HRESULT
+	// update
+	camera_update(ctx.dt)
+	// render
+	hr = renderer.commandAllocator->Reset()
+	check(hr, "Failed resetting command allocator")
 
+	viewport := d3d12.VIEWPORT {
+		Width  = f32(renderer.displayWidth),
+		Height = f32(renderer.displayHeight),
+	}
+
+	scissor_rect := d3d12.RECT {
+		left   = 0,
+		right  = i32(renderer.displayWidth),
+		top    = 0,
+		bottom = i32(renderer.displayHeight),
+	}
+
+	hr = renderer.commandList->Reset(renderer.commandAllocator, renderer.worldPipeline)
+	check(hr, "Failed to reset command list")
+
+	renderer.commandList->SetGraphicsRootSignature(renderer.rootSignature)
+	renderer.commandList->RSSetViewports(1, &viewport)
+	renderer.commandList->RSSetScissorRects(1, &scissor_rect)
+
+	to_render_target_barrier := d3d12.RESOURCE_BARRIER {
+		Type  = .TRANSITION,
+		Flags = {},
+	}
+
+	to_render_target_barrier.Transition = {
+		pResource   = renderer.renderTargets[renderer.frameIndex],
+		StateBefore = d3d12.RESOURCE_STATE_PRESENT,
+		StateAfter  = {.RENDER_TARGET},
+		Subresource = d3d12.RESOURCE_BARRIER_ALL_SUBRESOURCES,
+	}
+
+	renderer.commandList->ResourceBarrier(1, &to_render_target_barrier)
+
+	rtv_handle: d3d12.CPU_DESCRIPTOR_HANDLE
+	renderer.rsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_handle)
+
+	if (renderer.frameIndex > 0) {
+		s := renderer.device->GetDescriptorHandleIncrementSize(.RTV)
+		rtv_handle.ptr += uint(renderer.frameIndex * s)
+	}
+	depthHandle: d3d12.CPU_DESCRIPTOR_HANDLE
+	renderer.dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&depthHandle)
+
+	renderer.commandList->OMSetRenderTargets(1, &rtv_handle, false, &depthHandle)
+
+	// clear backbuffer
+	clearcolor := [?]f32{0.05, 0.05, 0.05, 1.0}
+	renderer.commandList->ClearRenderTargetView(rtv_handle, &clearcolor, 0, nil)
+	renderer.commandList->ClearDepthStencilView(
+		depthHandle,
+		d3d12.CLEAR_FLAGS{.DEPTH},
+		1,
+		0,
+		0,
+		nil,
+	)
+
+	// bind descriptors
+	heaps := [?]^d3d12.IDescriptorHeap{textureHeap, samplerHeap}
+
+	camera_gpu: d3d12.GPU_VIRTUAL_ADDRESS
+	base_sbv_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
+	base_sampler_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
+
+	camera_gpu = cameraData.dBuffer->GetGPUVirtualAddress()
+	textureHeap->GetGPUDescriptorHandleForHeapStart(&base_sbv_gpu)
+	srv_gpu := base_sbv_gpu
+	srv_gpu.ptr += u64(1) * u64(srvSize)
+	samplerHeap->GetGPUDescriptorHandleForHeapStart(&base_sampler_gpu)
+	sampler_gpu := base_sampler_gpu
+	sampler_gpu.ptr += u64(1) * u64(samplerSize)
+
+	renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])
+	renderer.commandList->SetGraphicsRootConstantBufferView(0, camera_gpu)
+	renderer.commandList->SetGraphicsRootDescriptorTable(1, srv_gpu)
+	renderer.commandList->SetGraphicsRootDescriptorTable(2, sampler_gpu)
+
+	// draw call
+	renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
+	renderer.commandList->IASetVertexBuffers(0, 1, &basicTrigBuffer.dBufferView)
+	renderer.commandList->DrawInstanced(u32(basicTrigBuffer.vertexCount), 1, 0, 0)
+
+	// draw ui
+	ui_render()
+
+	to_present_barrier := to_render_target_barrier
+	to_present_barrier.Transition.StateBefore = {.RENDER_TARGET}
+	to_present_barrier.Transition.StateAfter = d3d12.RESOURCE_STATE_PRESENT
+
+	renderer.commandList->ResourceBarrier(1, &to_present_barrier)
+
+	hr = renderer.commandList->Close()
+	check(hr, "Failed to close command list")
+
+	// execute
+	cmdlists := [?]^d3d12.IGraphicsCommandList{renderer.commandList}
+	renderer.queue->ExecuteCommandLists(len(cmdlists), (^^d3d12.ICommandList)(&cmdlists[0]))
+
+	// present
+	{
+		flags: dxgi.PRESENT
+		params: dxgi.PRESENT_PARAMETERS
+		hr = renderer.swapchain->Present1(1, flags, &params)
+		check(hr, "Present failed")
+	}
+
+	// wait for frame to finish
+	{
+		current_fence_value := renderer.renderFinishedFence.fenceValue
+
+		hr = renderer.queue->Signal(renderer.renderFinishedFence.dFence, current_fence_value)
+		check(hr, "Failed to signal fence")
+
+		renderer.renderFinishedFence.fenceValue += 1
+		completed := renderer.renderFinishedFence.dFence->GetCompletedValue()
+
+		if completed < current_fence_value {
+			hr = renderer.renderFinishedFence.dFence->SetEventOnCompletion(
+				current_fence_value,
+				renderer.renderFinishedFence.fenceEvent,
+			)
+			check(hr, "Failed to set event on completion flag")
+			windows.WaitForSingleObject(renderer.renderFinishedFence.fenceEvent, windows.INFINITE)
+		}
+
+		renderer.frameIndex = renderer.swapchain->GetCurrentBackBufferIndex()
+	}
+}
 create_window :: proc(width: i32, height: i32) -> glfw.WindowHandle {
 	if !glfw.Init() {
 		panic("Failed to initialize GLFW")
@@ -346,13 +351,12 @@ create_device :: proc() -> ^d3d12.IDevice {
 }
 create_debug :: proc() {
 	hr: d3d12.HRESULT
-	debug: ^d3d12.IDebug
 
-	hr = d3d12.GetDebugInterface(d3d12.IDebug_UUID, cast(^rawptr)&debug)
+	hr = d3d12.GetDebugInterface(d3d12.IDebug_UUID, cast(^rawptr)&renderer.debug)
 	if hr < 0 {
 		return
 	}
-	debug->EnableDebugLayer()
+	renderer.debug->EnableDebugLayer()
 }
 create_queue :: proc() -> ^d3d12.ICommandQueue {
 	hr: d3d12.HRESULT

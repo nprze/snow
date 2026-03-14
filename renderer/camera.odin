@@ -47,8 +47,7 @@ create_camera :: proc() {
 		Flags          = d3d12.DESCRIPTOR_HEAP_FLAGS{.SHADER_VISIBLE},
 	}
 
-	hr = renderer.device.CreateDescriptorHeap(
-		renderer.device,
+	hr = renderer.device->CreateDescriptorHeap(
 		&cbv_heap_desc,
 		d3d12.IDescriptorHeap_UUID,
 		cast(^rawptr)&cameraData.cbvHeap,
@@ -70,8 +69,7 @@ create_camera :: proc() {
 	heap := d3d12.HEAP_PROPERTIES{}
 	heap.Type = d3d12.HEAP_TYPE.UPLOAD
 
-	hr = renderer.device.CreateCommittedResource(
-		renderer.device,
+	hr = renderer.device->CreateCommittedResource(
 		&heap,
 		d3d12.HEAP_FLAGS{},
 		&cam_buffer_desc,
@@ -109,7 +107,11 @@ create_camera :: proc() {
 		&cameraData.heapHandle,
 	)
 
-	renderer.device.CreateConstantBufferView(renderer.device, &cbv_desc, cameraData.heapHandle)
+	renderer.device->CreateConstantBufferView(&cbv_desc, cameraData.heapHandle)
+}
+cleanup_camera :: proc() {
+	cameraData.dBuffer->Release()
+	cameraData.cbvHeap->Release()
 }
 recalculate_camera :: proc() {
 	cam := cameraData

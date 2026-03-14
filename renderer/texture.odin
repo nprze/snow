@@ -31,8 +31,7 @@ init_texture_loader :: proc() {
 		Flags          = d3d12.DESCRIPTOR_HEAP_FLAGS{.SHADER_VISIBLE},
 	}
 
-	hr := renderer.device.CreateDescriptorHeap(
-		renderer.device,
+	hr := renderer.device->CreateDescriptorHeap(
 		&sampler_heap_desc,
 		d3d12.IDescriptorHeap_UUID,
 		cast(^rawptr)&samplerHeap,
@@ -45,25 +44,23 @@ init_texture_loader :: proc() {
 		Flags          = d3d12.DESCRIPTOR_HEAP_FLAGS{.SHADER_VISIBLE},
 	}
 
-	hr = renderer.device.CreateDescriptorHeap(
-		renderer.device,
+	hr = renderer.device->CreateDescriptorHeap(
 		&srv_heap_desc,
 		d3d12.IDescriptorHeap_UUID,
 		cast(^rawptr)&textureHeap,
 	)
 	check(hr, "Failed to create SRV heap")
 	// sizes
-	srvSize = renderer.device.GetDescriptorHandleIncrementSize(
-		renderer.device,
+	srvSize = renderer.device->GetDescriptorHandleIncrementSize(
 		d3d12.DESCRIPTOR_HEAP_TYPE.CBV_SRV_UAV,
 	)
-	samplerSize = renderer.device.GetDescriptorHandleIncrementSize(
-		renderer.device,
+	samplerSize = renderer.device->GetDescriptorHandleIncrementSize(
 		d3d12.DESCRIPTOR_HEAP_TYPE.SAMPLER,
 	)
 }
 cleanup_texture_loader :: proc() {
 	samplerHeap->Release()
+	textureHeap->Release()
 }
 
 load_texture :: proc(path: string, textureOut: ^Texture) {
@@ -99,8 +96,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 	upload_heap.Type = d3d12.HEAP_TYPE.UPLOAD
 
 	texture: ^d3d12.IResource
-	hr = renderer.device.CreateCommittedResource(
-		renderer.device,
+	hr = renderer.device->CreateCommittedResource(
 		&default_heap,
 		d3d12.HEAP_FLAGS{},
 		&texture_desc,
@@ -116,8 +112,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 	row_size: u64
 	total_bytes: u64
 
-	renderer.device.GetCopyableFootprints(
-		renderer.device,
+	renderer.device->GetCopyableFootprints(
 		&texture_desc,
 		0,
 		1,
@@ -142,8 +137,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 	}
 
 	texture_upload: ^d3d12.IResource
-	hr = renderer.device.CreateCommittedResource(
-		renderer.device,
+	hr = renderer.device->CreateCommittedResource(
 		&upload_heap,
 		d3d12.HEAP_FLAGS{},
 		&buffer_desc,
@@ -250,7 +244,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 
 	textureOut.dSamplerHandle = sampler_handle
 
-	renderer.device.CreateSampler(renderer.device, &sampler_desc, textureOut.dSamplerHandle)
+	renderer.device->CreateSampler(&sampler_desc, textureOut.dSamplerHandle)
 
 	// srv
 	srv_desc := d3d12.SHADER_RESOURCE_VIEW_DESC {
@@ -273,12 +267,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 
 	textureOut.dSrvHandle = srv_handle
 
-	renderer.device.CreateShaderResourceView(
-		renderer.device,
-		texture,
-		&srv_desc,
-		textureOut.dSrvHandle,
-	)
+	renderer.device->CreateShaderResourceView(texture, &srv_desc, textureOut.dSrvHandle)
 
 	// output
 	textureOut.dHandle = texture
@@ -288,6 +277,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 	stbi.image_free(data)
 	texture_upload->Release()
 	cmdList->Release()
+	cleanup_fence(&fence)
 }
 cleanup_texture :: proc(texture: ^Texture) {
 	texture.dHandle->Release()

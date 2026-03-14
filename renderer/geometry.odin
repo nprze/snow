@@ -1,7 +1,6 @@
 package renderer
 
 import math "core:math"
-import "core:text/match"
 
 get_point_UV_shpere :: proc(
 	h: int,
