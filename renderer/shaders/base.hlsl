@@ -25,7 +25,7 @@ float rand(float x)
 Texture2D tex : register(t0);
 SamplerState samp : register(s0);
 float4 PSMain(PSInput input) : SV_TARGET {
-    float3 lightPosition = {0,3,0};
+    float3 lightPosition = {0,200,0};
     float3 lightColor = {0.4, 0.4, 0.7};
 
     float3 sampled = tex.Sample(samp, input.uv);
@@ -47,6 +47,5 @@ float4 PSMain(PSInput input) : SV_TARGET {
     float3 diffuse = lightColor * max(dot(toLight, flucNormal), 0) * 0.4;
     float3 ambient = input.color * 0.8 * (0.1 * noise.x +0.9);
 
-    //return float4(input.uv.x, input.uv.y, 1.0, 1.0);
     return float4(float3(specular, specular, specular) + ambient + diffuse, 1.0);
 };

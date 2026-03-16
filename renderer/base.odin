@@ -79,13 +79,13 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_pipeline()
 	create_camera()
 	create_command_list(&renderer.commandList)
-	initialize_vbuffer(&basicTrigBuffer, 4096, size_of(BasicVertex))
+	initialize_vbuffer(&basicTrigBuffer, 1000000, size_of(BasicVertex))
 	create_UV_sphere({0, 0, 2}, 0.5, 20, 20, {0.8, 0.8, 0.9})
 	create_rect({0, -2, 0}, {0, 1, 0}, {1, 1, 1}, 2)
 	// ui specific
 	ui_init()
 	create_noise_tex()
-
+	ugly_load_gltf("renderer/assets/bone/scene.gltf")
 }
 cleanup_renderer :: proc() {
 	// wait
@@ -114,6 +114,7 @@ cleanup_renderer :: proc() {
 	for i: u32 = 0; i < RENDERTARGETS_COUNT; i += 1 {
 		renderer.renderTargets[i]->Release()
 	}
+	cleanup_fence(&renderer.renderFinishedFence)
 	renderer.rsvDescriptorHeap->Release()
 	renderer.commandList->Release()
 	renderer.commandAllocator->Release()
@@ -121,13 +122,14 @@ cleanup_renderer :: proc() {
 	renderer.queue->Release()
 	debugDevice: ^d3d12.IDebugDevice
 	renderer.device->QueryInterface(d3d12.IDebugDevice_UUID, cast(^rawptr)&debugDevice)
-	renderer.device->Release()
-	renderer.adapter->Release()
-	renderer.factory->Release()
-	cleanup_fence(&renderer.renderFinishedFence)
 	if (debugDevice != nil) {
 		debugDevice->ReportLiveDeviceObjects({.DETAIL})
 	}
+	// for some reason, the device still has a ref after one Release() call, so calling twice
+	renderer.device->Release()
+	renderer.device->Release()
+	renderer.adapter->Release()
+	renderer.factory->Release()
 	renderer.debug->Release()
 }
 before_update :: proc() {
