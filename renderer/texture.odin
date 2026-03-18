@@ -18,9 +18,9 @@ Texture :: struct {
 maxDescCount: u32 = 16
 samplerHeap: ^d3d12.IDescriptorHeap
 textureHeap: ^d3d12.IDescriptorHeap
-srvSize: u32
+texViewSize: u32
 samplerSize: u32
-nestSrvSamplerIndex: u32 = 0
+nextTexSamplerIndex: u32 = 0
 
 init_texture_loader :: proc() {
 	stbi.set_flip_vertically_on_load(1)
@@ -51,7 +51,7 @@ init_texture_loader :: proc() {
 	)
 	check(hr, "Failed to create SRV heap")
 	// sizes
-	srvSize = renderer.device->GetDescriptorHandleIncrementSize(
+	texViewSize = renderer.device->GetDescriptorHandleIncrementSize(
 		d3d12.DESCRIPTOR_HEAP_TYPE.CBV_SRV_UAV,
 	)
 	samplerSize = renderer.device->GetDescriptorHandleIncrementSize(
@@ -240,7 +240,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 	samplerHeap.GetCPUDescriptorHandleForHeapStart(samplerHeap, &base_sampler_cpu)
 
 	sampler_handle := base_sampler_cpu
-	sampler_handle.ptr += uint(uintptr(nestSrvSamplerIndex) * uintptr(samplerSize))
+	sampler_handle.ptr += uint(uintptr(nextTexSamplerIndex) * uintptr(samplerSize))
 
 	textureOut.dSamplerHandle = sampler_handle
 
@@ -263,7 +263,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 	textureHeap->GetCPUDescriptorHandleForHeapStart(&base_srv_cpu)
 
 	srv_handle := base_srv_cpu
-	srv_handle.ptr += uint(uintptr(nestSrvSamplerIndex) * uintptr(srvSize))
+	srv_handle.ptr += uint(uintptr(nextTexSamplerIndex) * uintptr(texViewSize))
 
 	textureOut.dSrvHandle = srv_handle
 
@@ -271,7 +271,7 @@ load_texture :: proc(path: string, textureOut: ^Texture) {
 
 	// output
 	textureOut.dHandle = texture
-	nestSrvSamplerIndex += 1
+	nextTexSamplerIndex += 1
 
 	// cleanup
 	stbi.image_free(data)

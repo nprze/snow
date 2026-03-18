@@ -104,7 +104,7 @@ create_rect :: proc(middle: Vec3, normal: Vec3, color: Vec3, halfSideLenght: f32
 
 	add_vertices(&basicTrigBuffer, verts[:])
 }
-ugly_load_gltf :: proc(path: string) { 	// todo: make this better
+ugly_load_gltf :: proc(path: string) { 	// todo: optimize this
 	pathCStr: cstring = strings.clone_to_cstring(path)
 
 	options: cgltf.options

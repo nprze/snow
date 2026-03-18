@@ -67,7 +67,6 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_queue()
 	create_swap_chain()
 	create_rtv_descriptor_heap()
-	create_cbv_srv_uav_heap()
 	descHandle: d3d12.CPU_DESCRIPTOR_HANDLE = fetch_render_targets()
 	create_command_allocator()
 	create_fence(&renderer.renderFinishedFence)
@@ -78,6 +77,7 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_depth_buffer()
 	create_pipeline()
 	create_camera()
+	create_matrices_buffer()
 	create_command_list(&renderer.commandList)
 	initialize_vbuffer(&basicTrigBuffer, 1000000, size_of(BasicVertex))
 	create_UV_sphere({0, 0, 2}, 0.5, 20, 20, {0.8, 0.8, 0.9})
@@ -208,21 +208,24 @@ render_all :: proc(ctx: UpdateContext) {
 	heaps := [?]^d3d12.IDescriptorHeap{textureHeap, samplerHeap}
 
 	camera_gpu: d3d12.GPU_VIRTUAL_ADDRESS
+	matrices_gpu: d3d12.GPU_VIRTUAL_ADDRESS
 	base_sbv_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
 	base_sampler_gpu: d3d12.GPU_DESCRIPTOR_HANDLE
 
 	camera_gpu = cameraData.dBuffer->GetGPUVirtualAddress()
+	matrices_gpu = matrixBuffer->GetGPUVirtualAddress()
 	textureHeap->GetGPUDescriptorHandleForHeapStart(&base_sbv_gpu)
-	srv_gpu := base_sbv_gpu
-	srv_gpu.ptr += u64(1) * u64(srvSize)
+	testure_gpu := base_sbv_gpu
+	testure_gpu.ptr += u64(1) * u64(texViewSize)
 	samplerHeap->GetGPUDescriptorHandleForHeapStart(&base_sampler_gpu)
 	sampler_gpu := base_sampler_gpu
 	sampler_gpu.ptr += u64(1) * u64(samplerSize)
 
 	renderer.commandList->SetDescriptorHeaps(len(heaps), &heaps[0])
 	renderer.commandList->SetGraphicsRootConstantBufferView(0, camera_gpu)
-	renderer.commandList->SetGraphicsRootDescriptorTable(1, srv_gpu)
-	renderer.commandList->SetGraphicsRootDescriptorTable(2, sampler_gpu)
+	renderer.commandList->SetGraphicsRootShaderResourceView(1, matrices_gpu)
+	renderer.commandList->SetGraphicsRootDescriptorTable(2, testure_gpu)
+	renderer.commandList->SetGraphicsRootDescriptorTable(3, sampler_gpu)
 
 	// draw call
 	renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
@@ -434,9 +437,6 @@ create_command_list :: proc(
 	hr = (commandListOut^)->Close()
 	check(hr, "Failed to close command list")
 	return commandListOut
-}
-create_cbv_srv_uav_heap :: proc() {
-
 }
 fetch_render_targets :: proc() -> d3d12.CPU_DESCRIPTOR_HANDLE {
 	hr: d3d12.HRESULT

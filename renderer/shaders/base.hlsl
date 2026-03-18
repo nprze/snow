@@ -9,9 +9,11 @@ cbuffer CameraBuffer : register(b0)
 {
     float4x4 viewProj;
 };
+StructuredBuffer<float4x4> ModelMatrices : register(t0);
 PSInput VSMain(float3 position : POSITION0, float3 normal : NORMAL0, float3 color : COLOR0, float2 uv: TEXCOORD0) {
     PSInput result;
-    result.position = mul(float4(position, 1.0f), viewProj);
+    float4 worldPos = mul(float4(position, 1.0f), ModelMatrices[0]);
+    result.position = mul(worldPos, viewProj);
     result.color = color;
     result.pos = position;
     result.normal = normal;
@@ -22,7 +24,7 @@ float rand(float x)
 {
     return frac(sin(x) * 43758.5453123);
 }
-Texture2D tex : register(t0);
+Texture2D tex : register(t1);
 SamplerState samp : register(s0);
 float4 PSMain(PSInput input) : SV_TARGET {
     float3 lightPosition = {0,200,0};

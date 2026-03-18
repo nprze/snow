@@ -1,6 +1,7 @@
 package renderer
 
 import os "core:os"
+import "core:slice"
 import d3d12 "vendor:directx/d3d12"
 
 BasicVertex :: struct {
@@ -13,6 +14,8 @@ BasicVertex :: struct {
 
 basicTrigBuffer: VertexBuffer
 noiseTexture: Texture
+matrixBuffer: ^d3d12.IResource
+matrixMapped: []Mat4
 
 read_file :: proc(path: string) -> cstring {
 	data_slice, ok := os.read_entire_file(path)
@@ -82,7 +85,7 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 	srv_range := d3d12.DESCRIPTOR_RANGE {
 		RangeType                         = .SRV,
 		NumDescriptors                    = 1,
-		BaseShaderRegister                = 0,
+		BaseShaderRegister                = 1,
 		RegisterSpace                     = 0,
 		OffsetInDescriptorsFromTableStart = 0,
 	}
@@ -93,7 +96,7 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 		RegisterSpace                     = 0,
 		OffsetInDescriptorsFromTableStart = 0,
 	}
-	root_params: [3]d3d12.ROOT_PARAMETER
+	root_params: [4]d3d12.ROOT_PARAMETER
 
 	root_params[0] = {
 		ParameterType    = .CBV,
@@ -105,12 +108,12 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 	}
 
 	root_params[1] = {
-		ParameterType    = .DESCRIPTOR_TABLE,
-		ShaderVisibility = .PIXEL,
+		ParameterType    = .SRV,
+		ShaderVisibility = .VERTEX,
 	}
-	root_params[1].DescriptorTable = {
-		NumDescriptorRanges = 1,
-		pDescriptorRanges   = &srv_range,
+	root_params[1].Descriptor = {
+		ShaderRegister = 0,
+		RegisterSpace  = 0,
 	}
 
 	root_params[2] = {
@@ -119,11 +122,20 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 	}
 	root_params[2].DescriptorTable = {
 		NumDescriptorRanges = 1,
+		pDescriptorRanges   = &srv_range,
+	}
+
+	root_params[3] = {
+		ParameterType    = .DESCRIPTOR_TABLE,
+		ShaderVisibility = .PIXEL,
+	}
+	root_params[3].DescriptorTable = {
+		NumDescriptorRanges = 1,
 		pDescriptorRanges   = &sampler_range,
 	}
 
 	desc.Desc_1_0 = {
-		NumParameters     = 3,
+		NumParameters     = 4,
 		pParameters       = &root_params[0],
 		NumStaticSamplers = 0,
 		pStaticSamplers   = nil,
@@ -242,4 +254,52 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 }
 create_noise_tex :: proc() {
 	load_texture("renderer/assets/noise1.jpg", &noiseTexture)
+}
+create_matrices_buffer :: proc() {
+	hr: d3d12.HRESULT
+
+	heap_props := d3d12.HEAP_PROPERTIES {
+		Type = .UPLOAD,
+	}
+
+	bufferSizeBytes: int = 4 * 4 * 4 * 1024
+
+	resource_desc := d3d12.RESOURCE_DESC {
+		Dimension = .BUFFER,
+		Alignment = 0,
+		Width = u64(bufferSizeBytes),
+		Height = 1,
+		DepthOrArraySize = 1,
+		MipLevels = 1,
+		Format = .UNKNOWN,
+		SampleDesc = {Count = 1, Quality = 0},
+		Layout = .ROW_MAJOR,
+		Flags = {},
+	}
+
+	hr = renderer.device->CreateCommittedResource(
+		&heap_props,
+		{},
+		&resource_desc,
+		d3d12.RESOURCE_STATE_GENERIC_READ,
+		nil,
+		d3d12.IResource_UUID,
+		(^rawptr)(&matrixBuffer),
+	)
+	check(hr, "Failed creating ssbo buffer")
+
+	read_range: d3d12.RANGE
+
+	val: rawptr
+
+	hr = matrixBuffer->Map(0, &read_range, &val)
+	check(hr, "Failed to map ssbo buffer")
+
+	mapped: ^Mat4 = cast(^Mat4)val
+	matrixMapped = slice.from_ptr(mapped, 1024)
+
+	matrixMapped[0][0][0] = 0.02
+	matrixMapped[0][1][1] = 0.02
+	matrixMapped[0][2][2] = 0.02
+	matrixMapped[0][3][3] = 1.0
 }
