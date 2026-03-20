@@ -124,14 +124,12 @@ recalculate_camera :: proc() {
 
 	cameraData.currentCameraMatrix.camera = transmute([16]f32)vp
 }
-
 copy_camera_data :: proc() {
 	mapped: rawptr
 	cameraData.dBuffer.Map(cameraData.dBuffer, 0, nil, &mapped)
 	mem.copy(mapped, &cameraData.currentCameraMatrix.camera, cameraData.bufferSize)
 	cameraData.dBuffer.Unmap(cameraData.dBuffer, 0, nil)
 }
-
 camera_update :: proc(dt: f64) {
 	// movement
 	if ((glfw.GetKey(renderer.windowHandle, glfw.KEY_A) == glfw.PRESS) ||

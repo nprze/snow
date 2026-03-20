@@ -11,6 +11,15 @@ import mu "vendor:microui"
 
 RENDERTARGETS_COUNT :: 2
 
+BasicVertex :: struct {
+	// include allignment padding here.
+	position:    Vec3,
+	normal:      Vec3,
+	color:       Vec3,
+	uv:          Vec2,
+	matrixIndex: u32,
+}
+
 Fence :: struct {
 	fenceValue: u64,
 	dFence:     ^d3d12.IFence,
@@ -51,7 +60,6 @@ Renderer :: struct {
 }
 
 renderer: Renderer
-muContext: mu.Context
 
 create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	// general

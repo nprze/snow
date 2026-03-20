@@ -4,13 +4,6 @@ import os "core:os"
 import "core:slice"
 import d3d12 "vendor:directx/d3d12"
 
-BasicVertex :: struct {
-	// include allignment padding here.
-	position: Vec3,
-	normal:   Vec3,
-	color:    Vec3,
-	uv:       Vec2,
-}
 
 basicTrigBuffer: VertexBuffer
 noiseTexture: Texture
@@ -182,6 +175,12 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 			SemanticName = "TEXCOORD",
 			Format = .R32G32_FLOAT,
 			AlignedByteOffset = size_of(f32) * 9,
+			InputSlotClass = .PER_VERTEX_DATA,
+		},
+		{
+			SemanticName = "INDEX",
+			Format = .R32_UINT,
+			AlignedByteOffset = size_of(f32) * 11,
 			InputSlotClass = .PER_VERTEX_DATA,
 		},
 	}

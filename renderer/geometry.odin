@@ -60,13 +60,13 @@ create_UV_sphere :: proc(
 			p01, n01, uv01 := get_point_UV_shpere(h, v + 1, divV, divH, pos, radius)
 			p11, n11, uv11 := get_point_UV_shpere(h + 1, v + 1, divV, divH, pos, radius)
 
-			verts[idx + 0] = BasicVertex{p00, n00, color, uv00}
-			verts[idx + 1] = BasicVertex{p01, n01, color, uv01}
-			verts[idx + 2] = BasicVertex{p10, n10, color, uv10}
+			verts[idx + 0] = BasicVertex{p00, n00, color, uv00, 0}
+			verts[idx + 1] = BasicVertex{p01, n01, color, uv01, 0}
+			verts[idx + 2] = BasicVertex{p10, n10, color, uv10, 0}
 
-			verts[idx + 3] = BasicVertex{p10, n10, color, uv10}
-			verts[idx + 4] = BasicVertex{p01, n01, color, uv01}
-			verts[idx + 5] = BasicVertex{p11, n11, color, uv11}
+			verts[idx + 3] = BasicVertex{p10, n10, color, uv10, 0}
+			verts[idx + 4] = BasicVertex{p01, n01, color, uv01, 0}
+			verts[idx + 5] = BasicVertex{p11, n11, color, uv11, 0}
 
 			idx += 6
 		}
@@ -94,13 +94,13 @@ create_rect :: proc(middle: Vec3, normal: Vec3, color: Vec3, halfSideLenght: f32
 	uv01: Vec2 = {0, 1}
 	uv11: Vec2 = {1, 1}
 
-	verts[0] = BasicVertex{p00, normal, color, uv00}
-	verts[1] = BasicVertex{p01, normal, color, uv01}
-	verts[2] = BasicVertex{p10, normal, color, uv10}
+	verts[0] = BasicVertex{p00, normal, color, uv00, 0}
+	verts[1] = BasicVertex{p01, normal, color, uv01, 0}
+	verts[2] = BasicVertex{p10, normal, color, uv10, 0}
 
-	verts[3] = BasicVertex{p10, normal, color, uv10}
-	verts[4] = BasicVertex{p01, normal, color, uv01}
-	verts[5] = BasicVertex{p11, normal, color, uv11}
+	verts[3] = BasicVertex{p10, normal, color, uv10, 0}
+	verts[4] = BasicVertex{p01, normal, color, uv01, 0}
+	verts[5] = BasicVertex{p11, normal, color, uv11, 0}
 
 	add_vertices(&basicTrigBuffer, verts[:])
 }
@@ -167,11 +167,11 @@ ugly_load_gltf :: proc(path: string) { 	// todo: optimize this
 	for j in 0 ..< indicesAcc.count / 3 {
 		i := j * 3
 		index := indices[i]
-		verts[i + 2] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}}
+		verts[i + 2] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}, 0}
 		index = indices[i + 1]
-		verts[i + 1] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}}
+		verts[i + 1] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}, 0}
 		index = indices[i + 2]
-		verts[i + 0] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}}
+		verts[i + 0] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}, 0}
 	}
 	add_vertices(&basicTrigBuffer, verts)
 }

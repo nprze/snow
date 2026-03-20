@@ -18,7 +18,7 @@ main :: proc() {
 		now := time.now()
 		dt := time.duration_seconds(time.diff(now, last_time))
 		last_time = now
-		updateContext: ren.UpdateContext = ren.get_context(dt)
+		updateContext: UpdateContext = {dt, ren.muContext}
 		ren.before_update()
 		ren.update_world(updateContext)
 		ren.post_update()
