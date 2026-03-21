@@ -1,9 +1,9 @@
 package renderer
 
 import "base:runtime"
-import "bridge"
 import fmt "core:fmt"
 import "core:unicode/utf8"
+import snow "snow:bridge"
 import d3d12 "vendor:directx/d3d12"
 import glfw "vendor:glfw"
 import mu "vendor:microui"
@@ -23,17 +23,17 @@ UiVertex :: struct {
 char_callback :: proc "c" (window: glfw.WindowHandle, codepoint: rune) {
 	context = runtime.default_context()
 	buf, n := utf8.encode_rune(codepoint)
-	mu.input_text(&core.muContext, string(buf[:n]))
+	mu.input_text(&snow.muContext, string(buf[:n]))
 }
 cursor_pos_callback :: proc "c" (window: glfw.WindowHandle, xpos: f64, ypos: f64) {
 	context = runtime.default_context()
-	mu.input_mouse_move(&core.muContext, i32(xpos), i32(ypos))
+	mu.input_mouse_move(&snow.muContext, i32(xpos), i32(ypos))
 	lastX = i32(xpos)
 	lastY = i32(ypos)
 }
 scroll_callback :: proc "c" (window: glfw.WindowHandle, xoffset: f64, yoffset: f64) {
 	context = runtime.default_context()
-	mu.input_scroll(&core.muContext, 0, i32(-yoffset * 10))
+	mu.input_scroll(&snow.muContext, 0, i32(-yoffset * 10))
 }
 mouse_button_callback :: proc "c" (
 	window: glfw.WindowHandle,
@@ -52,18 +52,18 @@ mouse_button_callback :: proc "c" (
 		btn = mu.Mouse.MIDDLE
 	}
 	if action == glfw.PRESS {
-		mu.input_mouse_down(&core.muContext, lastX, lastY, btn)
+		mu.input_mouse_down(&snow.muContext, lastX, lastY, btn)
 	} else if action == glfw.RELEASE {
-		mu.input_mouse_up(&core.muContext, lastX, lastY, btn)
+		mu.input_mouse_up(&snow.muContext, lastX, lastY, btn)
 	}
 }
 
 ui_init :: proc() {
 	renderer.consolasFont = load_font("renderer/fonts/consolas.txt")
 
-	mu.init(&core.muContext)
-	core.muContext.text_width = mu.default_atlas_text_width
-	core.muContext.text_height = text_height
+	mu.init(&snow.muContext)
+	snow.muContext.text_width = mu.default_atlas_text_width
+	snow.muContext.text_height = text_height
 
 	glfw.SetCharCallback(renderer.windowHandle, char_callback)
 	glfw.SetCursorPosCallback(renderer.windowHandle, cursor_pos_callback)
@@ -225,16 +225,16 @@ ui_cleanup :: proc() {
 	cleanup_font(&renderer.consolasFont)
 }
 ui_begin :: proc() {
-	mu.begin(&core.muContext)
+	mu.begin(&snow.muContext)
 	reset_vbuffer(&renderer.uiVertexBuffer)
 }
 ui_end :: proc() {
-	mu.end(&core.muContext)
+	mu.end(&snow.muContext)
 }
 ui_render :: proc() {
 
 	command_backing: ^mu.Command
-	for variant in mu.next_command_iterator(&core.muContext, &command_backing) {
+	for variant in mu.next_command_iterator(&snow.muContext, &command_backing) {
 		switch cmd in variant {
 		case ^mu.Command_Rect:
 			{

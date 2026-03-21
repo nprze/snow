@@ -2,12 +2,11 @@ package renderer
 
 import "core:fmt"
 import "core:sys/windows"
-import "core:time"
+import snow "snow:bridge"
 import d3d12 "vendor:directx/d3d12"
 import d3dc "vendor:directx/d3d_compiler"
 import dxgi "vendor:directx/dxgi"
 import glfw "vendor:glfw"
-import mu "vendor:microui"
 
 RENDERTARGETS_COUNT :: 2
 
@@ -44,9 +43,9 @@ Renderer :: struct {
 	commandList:          ^d3d12.IGraphicsCommandList,
 	renderTargets:        [RENDERTARGETS_COUNT]^d3d12.IResource,
 	renderFinishedFence:  Fence,
-	rsvDescriptorHeap:    ^d3d12.IDescriptorHeap,
 	frameIndex:           u32,
-	// world depth
+	rsvDescriptorHeap:    ^d3d12.IDescriptorHeap,
+	// depth
 	dsvDescriptorHeap:    ^d3d12.IDescriptorHeap,
 	depthBuffer:          ^d3d12.IResource,
 	// world
@@ -87,7 +86,7 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_camera()
 	create_matrices_buffer()
 	create_command_list(&renderer.commandList)
-	initialize_vbuffer(&basicTrigBuffer, 1000000, size_of(BasicVertex))
+	initialize_vbuffer(&mainTrianangleleBuffer, 1000000, size_of(BasicVertex))
 	create_UV_sphere({0, 0, 2}, 0.5, 20, 20, {0.8, 0.8, 0.9})
 	create_rect({0, -2, 0}, {0, 1, 0}, {1, 1, 1}, 2)
 	// ui specific
@@ -112,7 +111,7 @@ cleanup_renderer :: proc() {
 	// ui
 	ui_cleanup()
 	// main
-	cleanup_vbuffer(&basicTrigBuffer)
+	cleanup_vbuffer(&mainTrianangleleBuffer)
 	renderer.worldPipeline->Release()
 	renderer.rootSignature->Release()
 	cleanup_texture(&noiseTexture)
@@ -147,7 +146,7 @@ before_update :: proc() {
 post_update :: proc() {
 	ui_end()
 }
-render_all :: proc(ctx: UpdateContext) {
+render_all :: proc(ctx: snow.UpdateContext) {
 	hr: d3d12.HRESULT
 	// update
 	camera_update(ctx.dt)
@@ -237,8 +236,8 @@ render_all :: proc(ctx: UpdateContext) {
 
 	// draw call
 	renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
-	renderer.commandList->IASetVertexBuffers(0, 1, &basicTrigBuffer.dBufferView)
-	renderer.commandList->DrawInstanced(u32(basicTrigBuffer.vertexCount), 1, 0, 0)
+	renderer.commandList->IASetVertexBuffers(0, 1, &mainTrianangleleBuffer.dBufferView)
+	renderer.commandList->DrawInstanced(u32(mainTrianangleleBuffer.vertexCount), 1, 0, 0)
 
 	// draw ui
 	ui_render()

@@ -6,4 +6,4 @@ raddbg.txt
 # editor
 .vscode/
 # odin
-ols.json
+!ols.json

@@ -2,6 +2,8 @@ package main
 
 import "core:time"
 import ren "renderer"
+import snow "snow:bridge"
+import world "snow:world"
 import glfw "vendor:glfw"
 
 main :: proc() {
@@ -18,9 +20,9 @@ main :: proc() {
 		now := time.now()
 		dt := time.duration_seconds(time.diff(now, last_time))
 		last_time = now
-		updateContext: UpdateContext = {dt, ren.muContext}
+		updateContext: snow.UpdateContext = {dt, &snow.muContext}
 		ren.before_update()
-		ren.update_world(updateContext)
+		world.update_world(updateContext)
 		ren.post_update()
 		ren.render_all(updateContext)
 	}

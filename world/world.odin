@@ -1,10 +1,11 @@
-package main
+package world
 
-import ren "renderer"
+import snow "snow:bridge"
+import ren "snow:renderer"
 import mu "vendor:microui"
 
 
-update_world :: proc(ctx: UpdateContext) {
+update_world :: proc(ctx: snow.UpdateContext) {
 	if mu.begin_window(ctx.muContext, "settings", mu.Rect{10, 10, 350, 200}) {
 		widths := []i32{}
 		mu.layout_row(ctx.muContext, widths[:])

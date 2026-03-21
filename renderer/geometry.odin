@@ -71,7 +71,7 @@ create_UV_sphere :: proc(
 			idx += 6
 		}
 	}
-	add_vertices(&basicTrigBuffer, verts[:])
+	add_vertices(&mainTrianangleleBuffer, verts[:])
 }
 create_rect :: proc(middle: Vec3, normal: Vec3, color: Vec3, halfSideLenght: f32) {
 	tangent: Vec3
@@ -102,7 +102,7 @@ create_rect :: proc(middle: Vec3, normal: Vec3, color: Vec3, halfSideLenght: f32
 	verts[4] = BasicVertex{p01, normal, color, uv01, 0}
 	verts[5] = BasicVertex{p11, normal, color, uv11, 0}
 
-	add_vertices(&basicTrigBuffer, verts[:])
+	add_vertices(&mainTrianangleleBuffer, verts[:])
 }
 ugly_load_gltf :: proc(path: string) { 	// todo: optimize this
 	pathCStr: cstring = strings.clone_to_cstring(path)
@@ -173,5 +173,5 @@ ugly_load_gltf :: proc(path: string) { 	// todo: optimize this
 		index = indices[i + 2]
 		verts[i + 0] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}, 0}
 	}
-	add_vertices(&basicTrigBuffer, verts)
+	add_vertices(&mainTrianangleleBuffer, verts)
 }

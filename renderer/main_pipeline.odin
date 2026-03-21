@@ -4,22 +4,11 @@ import os "core:os"
 import "core:slice"
 import d3d12 "vendor:directx/d3d12"
 
-
-basicTrigBuffer: VertexBuffer
+mainTrianangleleBuffer: VertexBuffer
 noiseTexture: Texture
 matrixBuffer: ^d3d12.IResource
 matrixMapped: []Mat4
 
-read_file :: proc(path: string) -> cstring {
-	data_slice, ok := os.read_entire_file(path)
-	if !ok {
-		panic("Failed to read file")
-	}
-	data := make([]u8, len(data_slice) + 1)
-	copy(data, data_slice)
-	data[len(data_slice)] = 0
-	return cstring(&data[0])
-}
 create_depth_buffer :: proc() {
 	// desc heap
 	hr: d3d12.HRESULT
