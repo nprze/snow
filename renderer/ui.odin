@@ -12,6 +12,11 @@ oneOver255: f32 = 1.0 / 255.0
 defaultFontSizePixel: i32 = 16
 lastX, lastY: i32
 
+uiPipeline: ^d3d12.IPipelineState
+uiRootSignature: ^d3d12.IRootSignature
+uiVertexBuffer: VertexBuffer
+consolasFont: Font
+
 UiVertex :: struct {
 	// include allignment padding here.
 	position: Vec2,
@@ -59,7 +64,7 @@ mouse_button_callback :: proc "c" (
 }
 
 ui_init :: proc() {
-	renderer.consolasFont = load_font("renderer/fonts/consolas.txt")
+	consolasFont = load_font("renderer/fonts/consolas.txt")
 
 	mu.init(&snow.muContext)
 	snow.muContext.text_width = mu.default_atlas_text_width
@@ -70,7 +75,7 @@ ui_init :: proc() {
 	glfw.SetScrollCallback(renderer.windowHandle, scroll_callback)
 	glfw.SetMouseButtonCallback(renderer.windowHandle, mouse_button_callback)
 
-	initialize_vbuffer(&renderer.uiVertexBuffer, 2048, size_of(UiVertex))
+	initialize_vbuffer(&uiVertexBuffer, 2048, size_of(UiVertex))
 
 	hr: d3d12.HRESULT
 	// root signature
@@ -128,7 +133,7 @@ ui_init :: proc() {
 		serialized_desc->GetBufferPointer(),
 		serialized_desc->GetBufferSize(),
 		d3d12.IRootSignature_UUID,
-		(^rawptr)(&renderer.uiRootSignature),
+		(^rawptr)(&uiRootSignature),
 	)
 	check(hr, "Failed creating root signature")
 	serialized_desc->Release()
@@ -172,7 +177,7 @@ ui_init :: proc() {
 	}
 
 	pipeline_state_desc := d3d12.GRAPHICS_PIPELINE_STATE_DESC {
-		pRootSignature = renderer.uiRootSignature,
+		pRootSignature = uiRootSignature,
 		VS = {pShaderBytecode = vs->GetBufferPointer(), BytecodeLength = vs->GetBufferSize()},
 		PS = {pShaderBytecode = ps->GetBufferPointer(), BytecodeLength = ps->GetBufferSize()},
 		StreamOutput = {},
@@ -210,7 +215,7 @@ ui_init :: proc() {
 	hr = renderer.device->CreateGraphicsPipelineState(
 		&pipeline_state_desc,
 		d3d12.IPipelineState_UUID,
-		(^rawptr)(&renderer.uiPipeline),
+		(^rawptr)(&uiPipeline),
 	)
 	check(hr, "Pipeline creation failed")
 
@@ -218,15 +223,15 @@ ui_init :: proc() {
 	ps->Release()
 }
 ui_cleanup :: proc() {
-	renderer.uiPipeline->Release()
-	renderer.uiRootSignature->Release()
+	uiPipeline->Release()
+	uiRootSignature->Release()
 	cleanup_texture_loader()
-	cleanup_vbuffer(&renderer.uiVertexBuffer)
-	cleanup_font(&renderer.consolasFont)
+	cleanup_vbuffer(&uiVertexBuffer)
+	cleanup_font(&consolasFont)
 }
 ui_begin :: proc() {
 	mu.begin(&snow.muContext)
-	reset_vbuffer(&renderer.uiVertexBuffer)
+	reset_vbuffer(&uiVertexBuffer)
 }
 ui_end :: proc() {
 	mu.end(&snow.muContext)
@@ -253,7 +258,7 @@ ui_render :: proc() {
 			{
 				add_text(
 					string(cmd.str),
-					renderer.consolasFont,
+					consolasFont,
 					Vec2{f32(cmd.pos.x), f32(cmd.pos.y)},
 					Vec3{1, 1, 1},
 				)
@@ -274,7 +279,7 @@ ui_render :: proc() {
 			case .RESIZE:
 				text = '⇲'
 			}
-			add_icon_screen(text, renderer.consolasFont, cmd.rect, Vec3{1, 1, 1})
+			add_icon_screen(text, consolasFont, cmd.rect, Vec3{1, 1, 1})
 
 		case ^mu.Command_Jump:
 		case ^mu.Command_Clip:
@@ -295,8 +300,8 @@ ui_render :: proc() {
 	renderer.commandList->RSSetViewports(1, &viewport)
 	renderer.commandList->RSSetScissorRects(1, &scissor_rect)
 
-	renderer.commandList->SetGraphicsRootSignature(renderer.uiRootSignature)
-	renderer.commandList->SetPipelineState(renderer.uiPipeline)
+	renderer.commandList->SetGraphicsRootSignature(uiRootSignature)
+	renderer.commandList->SetPipelineState(uiPipeline)
 	renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
 
 	heaps := [?]^d3d12.IDescriptorHeap{textureHeap, samplerHeap}
@@ -311,10 +316,10 @@ ui_render :: proc() {
 	renderer.commandList->SetGraphicsRootDescriptorTable(0, srv_gpu)
 	renderer.commandList->SetGraphicsRootDescriptorTable(1, sampler_gpu)
 
-	renderer.commandList->IASetVertexBuffers(0, 1, &renderer.uiVertexBuffer.dBufferView)
-	renderer.commandList->DrawInstanced(u32(renderer.uiVertexBuffer.vertexCount), 1, 0, 0)
+	renderer.commandList->IASetVertexBuffers(0, 1, &uiVertexBuffer.dBufferView)
+	renderer.commandList->DrawInstanced(u32(uiVertexBuffer.vertexCount), 1, 0, 0)
 
-	renderer.uiVertexBuffer.vertexCount = 0
+	uiVertexBuffer.vertexCount = 0
 }
 
 add_rect_screen :: proc(areaArg: Vec4, color: Vec4) {
@@ -349,7 +354,7 @@ add_icon_screen :: proc(text: rune, font: Font, rect: mu.Rect, color: Vec3) {
 		{{maxX, maxY}, {u1, v1}, colorVec4},
 	}
 
-	write_ui(&renderer.uiVertexBuffer, vertices[:])
+	write_ui(&uiVertexBuffer, vertices[:])
 
 }
 
@@ -372,7 +377,7 @@ add_rect :: proc(area: Vec4, color: Vec4) {
 		{{1.0, 1.0}, {1, 1, 1, 1}},
 		*/
 	}
-	write_ui(&renderer.uiVertexBuffer, vertices[:])
+	write_ui(&uiVertexBuffer, vertices[:])
 }
 
 add_text :: proc(text: string, font: Font, cursorPos: Vec2, color: Vec3) {
@@ -410,7 +415,7 @@ add_text :: proc(text: string, font: Font, cursorPos: Vec2, color: Vec3) {
 			{{area.x + area.z, area.y - area.w}, {u1, v1}, colorVec4},
 		}
 
-		write_ui(&renderer.uiVertexBuffer, vertices[:])
+		write_ui(&uiVertexBuffer, vertices[:])
 	}
 }
 text_height :: proc(font: mu.Font) -> i32 {

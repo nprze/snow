@@ -12,7 +12,7 @@ cbuffer CameraBuffer : register(b0)
 StructuredBuffer<float4x4> ModelMatrices : register(t0);
 PSInput VSMain(float3 position : POSITION0, float3 normal : NORMAL0, float3 color : COLOR0, float2 uv: TEXCOORD0, uint modelMatrix: INDEX0) {
     PSInput result;
-    float4 worldPos = mul(float4(position, 1.0f), ModelMatrices[0]);
+    float4 worldPos = mul(float4(position, 1.0f), ModelMatrices[modelMatrix]);
     result.position = mul(worldPos, viewProj);
     result.color = color;
     result.pos = position;

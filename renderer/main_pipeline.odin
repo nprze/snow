@@ -1,64 +1,18 @@
 package renderer
 
-import os "core:os"
 import "core:slice"
+import snow "snow:bridge"
 import d3d12 "vendor:directx/d3d12"
 
+worldPipeline: ^d3d12.IPipelineState
+worldPipelineRootSignature: ^d3d12.IRootSignature
 mainTrianangleleBuffer: VertexBuffer
 noiseTexture: Texture
 matrixBuffer: ^d3d12.IResource
 matrixMapped: []Mat4
+maxMatrices: u32 = 1024
+matricesCounter: u32
 
-create_depth_buffer :: proc() {
-	// desc heap
-	hr: d3d12.HRESULT
-	desc := d3d12.DESCRIPTOR_HEAP_DESC {
-		NumDescriptors = RENDERTARGETS_COUNT,
-		Type           = .DSV,
-		Flags          = {},
-	}
-
-	hr = renderer.device->CreateDescriptorHeap(
-		&desc,
-		d3d12.IDescriptorHeap_UUID,
-		(^rawptr)(&renderer.dsvDescriptorHeap),
-	)
-	check(hr, "Failed creating depth stencil descriptor heap")
-
-	// buffer
-	heap_props := d3d12.HEAP_PROPERTIES {
-		Type = .DEFAULT,
-	}
-	depthDesc: d3d12.RESOURCE_DESC = {
-		Dimension = .TEXTURE2D,
-		Width = u64(renderer.displayWidth),
-		Height = renderer.displayHeight,
-		DepthOrArraySize = 1,
-		MipLevels = 1,
-		Format = .D32_FLOAT,
-		SampleDesc = {Count = 1},
-		Flags = d3d12.RESOURCE_FLAGS{.ALLOW_DEPTH_STENCIL},
-	}
-	clearValue: d3d12.CLEAR_VALUE = {
-		Format = .D32_FLOAT,
-		DepthStencil = d3d12.DEPTH_STENCIL_VALUE{Depth = 1, Stencil = 0},
-	}
-
-	hr = renderer.device->CreateCommittedResource(
-		&heap_props,
-		{},
-		&depthDesc,
-		d3d12.RESOURCE_STATES{.DEPTH_WRITE},
-		&clearValue,
-		d3d12.IResource_UUID,
-		(^rawptr)(&renderer.depthBuffer),
-	)
-	check(hr, "Failed to create depth buffer")
-
-	handle: d3d12.CPU_DESCRIPTOR_HANDLE
-	renderer.dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&handle)
-	renderer.device->CreateDepthStencilView(renderer.depthBuffer, nil, handle)
-}
 create_root_signature :: proc() -> ^d3d12.IRootSignature {
 	hr: d3d12.HRESULT
 	desc := d3d12.VERSIONED_ROOT_SIGNATURE_DESC {
@@ -132,11 +86,11 @@ create_root_signature :: proc() -> ^d3d12.IRootSignature {
 		serialized_desc->GetBufferPointer(),
 		serialized_desc->GetBufferSize(),
 		d3d12.IRootSignature_UUID,
-		(^rawptr)(&renderer.rootSignature),
+		(^rawptr)(&worldPipelineRootSignature),
 	)
 	check(hr, "Failed creating root signature")
 	serialized_desc->Release()
-	return renderer.rootSignature
+	return worldPipelineRootSignature
 }
 create_pipeline :: proc() -> ^d3d12.IPipelineState {
 	hr: d3d12.HRESULT
@@ -188,7 +142,7 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 	}
 
 	pipeline_state_desc := d3d12.GRAPHICS_PIPELINE_STATE_DESC {
-		pRootSignature = renderer.rootSignature,
+		pRootSignature = worldPipelineRootSignature,
 		VS = {pShaderBytecode = vs->GetBufferPointer(), BytecodeLength = vs->GetBufferSize()},
 		PS = {pShaderBytecode = ps->GetBufferPointer(), BytecodeLength = ps->GetBufferSize()},
 		StreamOutput = {},
@@ -231,14 +185,14 @@ create_pipeline :: proc() -> ^d3d12.IPipelineState {
 	hr = renderer.device->CreateGraphicsPipelineState(
 		&pipeline_state_desc,
 		d3d12.IPipelineState_UUID,
-		(^rawptr)(&renderer.worldPipeline),
+		(^rawptr)(&worldPipeline),
 	)
 	check(hr, "Pipeline creation failed")
 
 	vs->Release()
 	ps->Release()
 
-	return renderer.worldPipeline
+	return worldPipeline
 }
 create_noise_tex :: proc() {
 	load_texture("renderer/assets/noise1.jpg", &noiseTexture)
@@ -250,7 +204,7 @@ create_matrices_buffer :: proc() {
 		Type = .UPLOAD,
 	}
 
-	bufferSizeBytes: int = 4 * 4 * 4 * 1024
+	bufferSizeBytes: int = 4 * 4 * 4 * int(maxMatrices)
 
 	resource_desc := d3d12.RESOURCE_DESC {
 		Dimension = .BUFFER,
@@ -290,4 +244,26 @@ create_matrices_buffer :: proc() {
 	matrixMapped[0][1][1] = 0.02
 	matrixMapped[0][2][2] = 0.02
 	matrixMapped[0][3][3] = 1.0
+
+	matricesCounter = 1
+}
+
+// matrices buffer utilities
+add_matrix :: proc(pos: Vec3, rot: Vec3, scale: Vec3) -> u32 {
+	matricesCounter += 1
+	assert(matricesCounter < maxMatrices, "matrices buffer is too small")
+	matrixMapped[matricesCounter] = snow.mat4_from_transform(pos, rot, scale)
+	return matricesCounter
+}
+add_matrix_mat :: proc(mat: Mat4) -> u32 {
+	matricesCounter += 1
+	assert(matricesCounter < maxMatrices, "matrices buffer is too small")
+	matrixMapped[matricesCounter] = mat
+	return matricesCounter
+}
+modify_matrix :: proc(pos: Vec3, rot: Vec3, scale: Vec3, index: u32) {
+	matrixMapped[index] = snow.mat4_from_transform(pos, rot, scale)
+}
+modify_matrix_mat :: proc(mat: Mat4, index: u32) {
+	matrixMapped[index] = mat
 }

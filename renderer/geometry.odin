@@ -1,23 +1,12 @@
 package renderer
 
-import fmt "core:fmt"
 import math "core:math"
 import slice "core:slice"
 import "core:strings"
+import snow "snow:bridge"
 import cgltf "vendor:cgltf"
 
-get_point_UV_shpere :: proc(
-	h: int,
-	v: int,
-	divV: int,
-	divH: int,
-	pos: Vec3,
-	radius: f32,
-) -> (
-	Vec3,
-	Vec3,
-	Vec2,
-) {
+get_point_UV_shpere :: proc(h: int, v: int, divV: int, divH: int) -> (Vec3, Vec3, Vec2) {
 	using math
 	t_h := f32(h) / f32(divH)
 	t_v := f32(v) / f32(divV)
@@ -33,7 +22,7 @@ get_point_UV_shpere :: proc(
 	z := sin_phi * sin(theta)
 	uv := Vec2{t_h, t_v}
 
-	return Vec3{pos[0] + x * radius, pos[1] + y * radius, pos[2] + z * radius}, Vec3{x, y, z}, uv
+	return Vec3{x, y, z}, Vec3{x, y, z}, uv
 }
 create_UV_sphere :: proc(
 	pos: Vec3,
@@ -41,7 +30,7 @@ create_UV_sphere :: proc(
 	divHArg: int,
 	divVArg: int,
 	color: Vec3 = {1, 1, 1},
-) {
+) -> u32 {
 	divV: int = divVArg
 	divH: int = divHArg
 
@@ -53,27 +42,33 @@ create_UV_sphere :: proc(
 
 	idx := 0
 
+	matrixIndex: u32 = add_matrix(pos, {0, 0, 0}, {radius, radius, radius})
+
 	for v := 0; v < divV; v += 1 {
 		for h := 0; h < divH; h += 1 {
-			p00, n00, uv00 := get_point_UV_shpere(h, v, divV, divH, pos, radius)
-			p10, n10, uv10 := get_point_UV_shpere(h + 1, v, divV, divH, pos, radius)
-			p01, n01, uv01 := get_point_UV_shpere(h, v + 1, divV, divH, pos, radius)
-			p11, n11, uv11 := get_point_UV_shpere(h + 1, v + 1, divV, divH, pos, radius)
+			p00, n00, uv00 := get_point_UV_shpere(h, v, divV, divH)
+			p10, n10, uv10 := get_point_UV_shpere(h + 1, v, divV, divH)
+			p01, n01, uv01 := get_point_UV_shpere(h, v + 1, divV, divH)
+			p11, n11, uv11 := get_point_UV_shpere(h + 1, v + 1, divV, divH)
 
-			verts[idx + 0] = BasicVertex{p00, n00, color, uv00, 0}
-			verts[idx + 1] = BasicVertex{p01, n01, color, uv01, 0}
-			verts[idx + 2] = BasicVertex{p10, n10, color, uv10, 0}
+			verts[idx + 0] = BasicVertex{p00, n00, color, uv00, matrixIndex}
+			verts[idx + 1] = BasicVertex{p01, n01, color, uv01, matrixIndex}
+			verts[idx + 2] = BasicVertex{p10, n10, color, uv10, matrixIndex}
 
-			verts[idx + 3] = BasicVertex{p10, n10, color, uv10, 0}
-			verts[idx + 4] = BasicVertex{p01, n01, color, uv01, 0}
-			verts[idx + 5] = BasicVertex{p11, n11, color, uv11, 0}
+			verts[idx + 3] = BasicVertex{p10, n10, color, uv10, matrixIndex}
+			verts[idx + 4] = BasicVertex{p01, n01, color, uv01, matrixIndex}
+			verts[idx + 5] = BasicVertex{p11, n11, color, uv11, matrixIndex}
 
 			idx += 6
 		}
 	}
 	add_vertices(&mainTrianangleleBuffer, verts[:])
+
+	return matrixIndex
 }
-create_rect :: proc(middle: Vec3, normal: Vec3, color: Vec3, halfSideLenght: f32) {
+create_rect :: proc(middle: Vec3, normal: Vec3, color: Vec3, halfSideLenght: f32) -> u32 {
+	matrixIndex: u32 = add_matrix({0, 0, 0}, {0, 0, 0}, {1, 1, 1})
+
 	tangent: Vec3
 	if (abs(normal.x) > abs(normal.z)) {
 		tangent = normalize(Vec3{-normal.y, normal.x, 0.0})
@@ -94,17 +89,107 @@ create_rect :: proc(middle: Vec3, normal: Vec3, color: Vec3, halfSideLenght: f32
 	uv01: Vec2 = {0, 1}
 	uv11: Vec2 = {1, 1}
 
-	verts[0] = BasicVertex{p00, normal, color, uv00, 0}
-	verts[1] = BasicVertex{p01, normal, color, uv01, 0}
-	verts[2] = BasicVertex{p10, normal, color, uv10, 0}
+	verts[0] = BasicVertex{p00, normal, color, uv00, matrixIndex}
+	verts[1] = BasicVertex{p01, normal, color, uv01, matrixIndex}
+	verts[2] = BasicVertex{p10, normal, color, uv10, matrixIndex}
 
-	verts[3] = BasicVertex{p10, normal, color, uv10, 0}
-	verts[4] = BasicVertex{p01, normal, color, uv01, 0}
-	verts[5] = BasicVertex{p11, normal, color, uv11, 0}
+	verts[3] = BasicVertex{p10, normal, color, uv10, matrixIndex}
+	verts[4] = BasicVertex{p01, normal, color, uv01, matrixIndex}
+	verts[5] = BasicVertex{p11, normal, color, uv11, matrixIndex}
 
 	add_vertices(&mainTrianangleleBuffer, verts[:])
+
+	return matrixIndex
 }
-ugly_load_gltf :: proc(path: string) { 	// todo: optimize this
+create_cube :: proc(pos: Vec3, rot: Vec3, scale: Vec3, color: Vec3) -> u32 {
+	matrixIndex: u32 = add_matrix(pos, rot, scale)
+
+	hs := Vec3{0.5, 0.5, 0.5}
+
+	p000 := Vec3{-hs.x, -hs.y, -hs.z}
+	p001 := Vec3{-hs.x, -hs.y, hs.z}
+	p010 := Vec3{-hs.x, hs.y, -hs.z}
+	p011 := Vec3{-hs.x, hs.y, hs.z}
+	p100 := Vec3{hs.x, -hs.y, -hs.z}
+	p101 := Vec3{hs.x, -hs.y, hs.z}
+	p110 := Vec3{hs.x, hs.y, -hs.z}
+	p111 := Vec3{hs.x, hs.y, hs.z}
+
+	verts := make([]BasicVertex, 36)
+
+	uv00: Vec2 = {0, 0}
+	uv10: Vec2 = {1, 0}
+	uv01: Vec2 = {0, 1}
+	uv11: Vec2 = {1, 1}
+
+	i := 0
+	// front
+	n := Vec3{0, 0, 1}
+	verts[i] = BasicVertex{p001, n, color, uv00, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p011, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p101, n, color, uv10, matrixIndex}; i += 1
+
+	verts[i] = BasicVertex{p101, n, color, uv10, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p011, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p111, n, color, uv11, matrixIndex}; i += 1
+
+	// back
+	n = Vec3{0, 0, -1}
+	verts[i] = BasicVertex{p100, n, color, uv00, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p110, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p000, n, color, uv10, matrixIndex}; i += 1
+
+	verts[i] = BasicVertex{p000, n, color, uv10, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p110, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p010, n, color, uv11, matrixIndex}; i += 1
+
+	// left
+	n = Vec3{-1, 0, 0}
+	verts[i] = BasicVertex{p000, n, color, uv00, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p010, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p001, n, color, uv10, matrixIndex}; i += 1
+
+	verts[i] = BasicVertex{p001, n, color, uv10, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p010, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p011, n, color, uv11, matrixIndex}; i += 1
+
+	// right
+	n = Vec3{1, 0, 0}
+	verts[i] = BasicVertex{p101, n, color, uv00, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p111, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p100, n, color, uv10, matrixIndex}; i += 1
+
+	verts[i] = BasicVertex{p100, n, color, uv10, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p111, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p110, n, color, uv11, matrixIndex}; i += 1
+
+	// top
+	n = Vec3{0, 1, 0}
+	verts[i] = BasicVertex{p010, n, color, uv00, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p110, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p011, n, color, uv10, matrixIndex}; i += 1
+
+	verts[i] = BasicVertex{p011, n, color, uv10, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p110, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p111, n, color, uv11, matrixIndex}; i += 1
+
+	// bottom
+	n = Vec3{0, -1, 0}
+	verts[i] = BasicVertex{p000, n, color, uv00, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p001, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p100, n, color, uv10, matrixIndex}; i += 1
+
+	verts[i] = BasicVertex{p100, n, color, uv10, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p001, n, color, uv01, matrixIndex}; i += 1
+	verts[i] = BasicVertex{p101, n, color, uv11, matrixIndex}; i += 1
+
+	add_vertices(&mainTrianangleleBuffer, verts[:])
+
+	return matrixIndex
+}
+ugly_load_gltf :: proc(path: string) -> u32 { 	// todo: optimize this
+	matrixIndex: u32 = add_matrix({0, 0, 0}, {0, 0, 0}, {1, 1, 1})
+
 	pathCStr: cstring = strings.clone_to_cstring(path)
 
 	options: cgltf.options
@@ -167,11 +252,31 @@ ugly_load_gltf :: proc(path: string) { 	// todo: optimize this
 	for j in 0 ..< indicesAcc.count / 3 {
 		i := j * 3
 		index := indices[i]
-		verts[i + 2] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}, 0}
+		verts[i + 2] = BasicVertex {
+			positions[index],
+			normals[index],
+			{1, 1, 1},
+			{1, 0},
+			matrixIndex,
+		}
 		index = indices[i + 1]
-		verts[i + 1] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}, 0}
+		verts[i + 1] = BasicVertex {
+			positions[index],
+			normals[index],
+			{1, 1, 1},
+			{1, 0},
+			matrixIndex,
+		}
 		index = indices[i + 2]
-		verts[i + 0] = BasicVertex{positions[index], normals[index], {1, 1, 1}, {1, 0}, 0}
+		verts[i + 0] = BasicVertex {
+			positions[index],
+			normals[index],
+			{1, 1, 1},
+			{1, 0},
+			matrixIndex,
+		}
 	}
 	add_vertices(&mainTrianangleleBuffer, verts)
+
+	return matrixIndex
 }

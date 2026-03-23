@@ -41,21 +41,15 @@ Renderer :: struct {
 	swapchain:            ^dxgi.ISwapChain3,
 	commandAllocator:     ^d3d12.ICommandAllocator,
 	commandList:          ^d3d12.IGraphicsCommandList,
-	renderTargets:        [RENDERTARGETS_COUNT]^d3d12.IResource,
+	// sync
 	renderFinishedFence:  Fence,
 	frameIndex:           u32,
-	rsvDescriptorHeap:    ^d3d12.IDescriptorHeap,
+	//
+	rtvDescriptorHeap:    ^d3d12.IDescriptorHeap,
+	renderTargets:        [RENDERTARGETS_COUNT]^d3d12.IResource,
 	// depth
 	dsvDescriptorHeap:    ^d3d12.IDescriptorHeap,
 	depthBuffer:          ^d3d12.IResource,
-	// world
-	worldPipeline:        ^d3d12.IPipelineState,
-	rootSignature:        ^d3d12.IRootSignature,
-	// ui
-	uiPipeline:           ^d3d12.IPipelineState,
-	uiRootSignature:      ^d3d12.IRootSignature,
-	uiVertexBuffer:       VertexBuffer,
-	consolasFont:         Font,
 }
 
 renderer: Renderer
@@ -92,7 +86,8 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	// ui specific
 	ui_init()
 	create_noise_tex()
-	ugly_load_gltf("renderer/assets/bone/scene.gltf")
+	index := ugly_load_gltf("renderer/assets/bone/scene.gltf")
+	modify_matrix({}, {}, {0.02, 0.02, 0.02}, index)
 }
 cleanup_renderer :: proc() {
 	// wait
@@ -112,8 +107,8 @@ cleanup_renderer :: proc() {
 	ui_cleanup()
 	// main
 	cleanup_vbuffer(&mainTrianangleleBuffer)
-	renderer.worldPipeline->Release()
-	renderer.rootSignature->Release()
+	worldPipeline->Release()
+	worldPipelineRootSignature->Release()
 	cleanup_texture(&noiseTexture)
 	// depth
 	renderer.depthBuffer->Release()
@@ -122,7 +117,7 @@ cleanup_renderer :: proc() {
 		renderer.renderTargets[i]->Release()
 	}
 	cleanup_fence(&renderer.renderFinishedFence)
-	renderer.rsvDescriptorHeap->Release()
+	renderer.rtvDescriptorHeap->Release()
 	renderer.commandList->Release()
 	renderer.commandAllocator->Release()
 	renderer.swapchain->Release()
@@ -166,10 +161,10 @@ render_all :: proc(ctx: snow.UpdateContext) {
 		bottom = i32(renderer.displayHeight),
 	}
 
-	hr = renderer.commandList->Reset(renderer.commandAllocator, renderer.worldPipeline)
+	hr = renderer.commandList->Reset(renderer.commandAllocator, worldPipeline)
 	check(hr, "Failed to reset command list")
 
-	renderer.commandList->SetGraphicsRootSignature(renderer.rootSignature)
+	renderer.commandList->SetGraphicsRootSignature(worldPipelineRootSignature)
 	renderer.commandList->RSSetViewports(1, &viewport)
 	renderer.commandList->RSSetScissorRects(1, &scissor_rect)
 
@@ -188,7 +183,7 @@ render_all :: proc(ctx: snow.UpdateContext) {
 	renderer.commandList->ResourceBarrier(1, &to_render_target_barrier)
 
 	rtv_handle: d3d12.CPU_DESCRIPTOR_HANDLE
-	renderer.rsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_handle)
+	renderer.rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_handle)
 
 	if (renderer.frameIndex > 0) {
 		s := renderer.device->GetDescriptorHandleIncrementSize(.RTV)
@@ -423,10 +418,10 @@ create_rtv_descriptor_heap :: proc() -> ^d3d12.IDescriptorHeap {
 	hr = renderer.device->CreateDescriptorHeap(
 		&desc,
 		d3d12.IDescriptorHeap_UUID,
-		(^rawptr)(&renderer.rsvDescriptorHeap),
+		(^rawptr)(&renderer.rtvDescriptorHeap),
 	)
 	check(hr, "Failed creating descriptor heap")
-	return renderer.rsvDescriptorHeap
+	return renderer.rtvDescriptorHeap
 }
 create_command_list :: proc(
 	commandListOut: ^^d3d12.IGraphicsCommandList,
@@ -436,7 +431,7 @@ create_command_list :: proc(
 		0,
 		.DIRECT,
 		renderer.commandAllocator,
-		renderer.worldPipeline,
+		worldPipeline,
 		d3d12.ICommandList_UUID,
 		(^rawptr)(commandListOut),
 	)
@@ -450,7 +445,7 @@ fetch_render_targets :: proc() -> d3d12.CPU_DESCRIPTOR_HANDLE {
 	rtv_descriptor_size: u32 = renderer.device->GetDescriptorHandleIncrementSize(.RTV)
 
 	rtv_descriptor_handle: d3d12.CPU_DESCRIPTOR_HANDLE
-	renderer.rsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_descriptor_handle)
+	renderer.rtvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&rtv_descriptor_handle)
 
 	for i: u32 = 0; i < RENDERTARGETS_COUNT; i += 1 {
 		hr = renderer.swapchain->GetBuffer(
@@ -477,6 +472,56 @@ create_command_allocator :: proc() -> ^d3d12.ICommandAllocator {
 	)
 	check(hr, "Failed creating command allocator")
 	return renderer.commandAllocator
+}
+create_depth_buffer :: proc() {
+	// desc heap
+	hr: d3d12.HRESULT
+	desc := d3d12.DESCRIPTOR_HEAP_DESC {
+		NumDescriptors = RENDERTARGETS_COUNT,
+		Type           = .DSV,
+		Flags          = {},
+	}
+
+	hr = renderer.device->CreateDescriptorHeap(
+		&desc,
+		d3d12.IDescriptorHeap_UUID,
+		(^rawptr)(&renderer.dsvDescriptorHeap),
+	)
+	check(hr, "Failed creating depth stencil descriptor heap")
+
+	// buffer
+	heap_props := d3d12.HEAP_PROPERTIES {
+		Type = .DEFAULT,
+	}
+	depthDesc: d3d12.RESOURCE_DESC = {
+		Dimension = .TEXTURE2D,
+		Width = u64(renderer.displayWidth),
+		Height = renderer.displayHeight,
+		DepthOrArraySize = 1,
+		MipLevels = 1,
+		Format = .D32_FLOAT,
+		SampleDesc = {Count = 1},
+		Flags = d3d12.RESOURCE_FLAGS{.ALLOW_DEPTH_STENCIL},
+	}
+	clearValue: d3d12.CLEAR_VALUE = {
+		Format = .D32_FLOAT,
+		DepthStencil = d3d12.DEPTH_STENCIL_VALUE{Depth = 1, Stencil = 0},
+	}
+
+	hr = renderer.device->CreateCommittedResource(
+		&heap_props,
+		{},
+		&depthDesc,
+		d3d12.RESOURCE_STATES{.DEPTH_WRITE},
+		&clearValue,
+		d3d12.IResource_UUID,
+		(^rawptr)(&renderer.depthBuffer),
+	)
+	check(hr, "Failed to create depth buffer")
+
+	handle: d3d12.CPU_DESCRIPTOR_HANDLE
+	renderer.dsvDescriptorHeap->GetCPUDescriptorHandleForHeapStart(&handle)
+	renderer.device->CreateDepthStencilView(renderer.depthBuffer, nil, handle)
 }
 create_fence :: proc(fenceOut: ^Fence) -> ^Fence {
 	hr: d3d12.HRESULT

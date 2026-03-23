@@ -15,12 +15,15 @@ main :: proc() {
 	defer ren.delete_window(window)
 	// renderer
 	ren.create_renderer(u32(vw), u32(vh), window)
+	world.create_world()
 	last_time := time.now()
+	globalTime: f64 = 0
 	for !glfw.WindowShouldClose(window) {
 		now := time.now()
 		dt := time.duration_seconds(time.diff(now, last_time))
+		globalTime += dt
 		last_time = now
-		updateContext: snow.UpdateContext = {dt, &snow.muContext}
+		updateContext: snow.UpdateContext = {dt, globalTime, &snow.muContext}
 		ren.before_update()
 		world.update_world(updateContext)
 		ren.post_update()
