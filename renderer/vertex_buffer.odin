@@ -11,7 +11,7 @@ VertexBuffer :: struct {
 	maxVertexCount: int,
 }
 
-initialize_vbuffer :: proc(buffer: ^VertexBuffer, vertexCount: int, oneVertexSize: int) { 	// will round sizeBytes down to the nearest multiple of the vertex size
+initialize_vbuffer :: proc(buffer: ^VertexBuffer, vertexCount: int, oneVertexSize: int) {
 	hr: d3d12.HRESULT
 
 	heap_props := d3d12.HEAP_PROPERTIES {

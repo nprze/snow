@@ -7,6 +7,7 @@ import d3d12 "vendor:directx/d3d12"
 worldPipeline: ^d3d12.IPipelineState
 worldPipelineRootSignature: ^d3d12.IRootSignature
 mainTrianangleleBuffer: VertexBuffer
+debugDrawBuffer: VertexBuffer
 noiseTexture: Texture
 matrixBuffer: ^d3d12.IResource
 matrixMapped: []Mat4
@@ -240,9 +241,9 @@ create_matrices_buffer :: proc() {
 	mapped: ^Mat4 = cast(^Mat4)val
 	matrixMapped = slice.from_ptr(mapped, 1024)
 
-	matrixMapped[0][0][0] = 0.02
-	matrixMapped[0][1][1] = 0.02
-	matrixMapped[0][2][2] = 0.02
+	matrixMapped[0][0][0] = 1.0
+	matrixMapped[0][1][1] = 1.0
+	matrixMapped[0][2][2] = 1.0
 	matrixMapped[0][3][3] = 1.0
 
 	matricesCounter = 1

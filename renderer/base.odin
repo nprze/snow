@@ -80,7 +80,8 @@ create_renderer :: proc(width: u32, height: u32, window: glfw.WindowHandle) {
 	create_camera()
 	create_matrices_buffer()
 	create_command_list(&renderer.commandList)
-	initialize_vbuffer(&mainTrianangleleBuffer, 1000000, size_of(BasicVertex))
+	initialize_vbuffer(&mainTrianangleleBuffer, 16384, size_of(BasicVertex))
+	initialize_vbuffer(&debugDrawBuffer, 8192, size_of(BasicVertex))
 	create_UV_sphere({0, 0, 2}, 0.5, 20, 20, {0.8, 0.8, 0.9})
 	create_rect({0, -2, 0}, {0, 1, 0}, {1, 1, 1}, 2)
 	// ui specific
@@ -233,6 +234,12 @@ render_all :: proc(ctx: snow.UpdateContext) {
 	renderer.commandList->IASetPrimitiveTopology(.TRIANGLELIST)
 	renderer.commandList->IASetVertexBuffers(0, 1, &mainTrianangleleBuffer.dBufferView)
 	renderer.commandList->DrawInstanced(u32(mainTrianangleleBuffer.vertexCount), 1, 0, 0)
+
+	if (debugDrawBuffer.vertexCount > 0) {
+		renderer.commandList->IASetVertexBuffers(0, 1, &debugDrawBuffer.dBufferView)
+		renderer.commandList->DrawInstanced(u32(debugDrawBuffer.vertexCount), 1, 0, 0)
+		debugDrawBuffer.vertexCount = 0
+	}
 
 	// draw ui
 	ui_render()

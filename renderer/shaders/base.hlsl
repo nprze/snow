@@ -15,8 +15,9 @@ PSInput VSMain(float3 position : POSITION0, float3 normal : NORMAL0, float3 colo
     float4 worldPos = mul(float4(position, 1.0f), ModelMatrices[modelMatrix]);
     result.position = mul(worldPos, viewProj);
     result.color = color;
-    result.pos = position;
-    result.normal = normal;
+    result.pos = worldPos.xyz;
+    float3 worldNormal = mul((float3x3)ModelMatrices[modelMatrix], normal);
+    result.normal = normalize(worldNormal);
     result.uv = uv;
     return result;
 }
@@ -31,11 +32,12 @@ float4 PSMain(PSInput input) : SV_TARGET {
     float3 lightColor = {0.4, 0.4, 0.7};
 
     float3 sampled = tex.Sample(samp, input.uv);
-    float3 noise = length(sampled);
+    float noise = length(sampled);
     float random = noise * 2 * 3.14;
 
     float3 normal = normalize(input.normal);
-    float3 tangent = normalize(cross(normal, float3(0,1,0)));
+    float3 up = abs(normal.y) > 0.99 ? float3(1,0,0) : float3(0,1,0);
+    float3 tangent = normalize(cross(normal, up));
     float3 bitangent = normalize(cross(normal, tangent));
 
     float toAddVector = normalize(tangent * cos(random) + bitangent * sin(random)) * 0.1 * noise;
@@ -43,7 +45,6 @@ float4 PSMain(PSInput input) : SV_TARGET {
     float3 flucNormal = normalize(normal+toAddVector);
 
     float3 toLight = normalize(lightPosition - input.pos);
-    
     
     float specular = pow(max(dot(toLight, flucNormal), 0), 32) * 0.5;
     float3 diffuse = lightColor * max(dot(toLight, flucNormal), 0) * 0.4;

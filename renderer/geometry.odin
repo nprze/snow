@@ -101,7 +101,7 @@ create_rect :: proc(middle: Vec3, normal: Vec3, color: Vec3, halfSideLenght: f32
 
 	return matrixIndex
 }
-create_cube :: proc(pos: Vec3, rot: Vec3, scale: Vec3, color: Vec3) -> u32 {
+create_cube_mesh :: proc(pos: Vec3, rot: Vec3, scale: Vec3, color: Vec3) -> u32 {
 	matrixIndex: u32 = add_matrix(pos, rot, scale)
 
 	hs := Vec3{0.5, 0.5, 0.5}
@@ -124,7 +124,7 @@ create_cube :: proc(pos: Vec3, rot: Vec3, scale: Vec3, color: Vec3) -> u32 {
 
 	i := 0
 	// front
-	n := Vec3{0, 0, 1}
+	n := Vec3{0, 0, -1}
 	verts[i] = BasicVertex{p001, n, color, uv00, matrixIndex}; i += 1
 	verts[i] = BasicVertex{p011, n, color, uv01, matrixIndex}; i += 1
 	verts[i] = BasicVertex{p101, n, color, uv10, matrixIndex}; i += 1
@@ -134,7 +134,7 @@ create_cube :: proc(pos: Vec3, rot: Vec3, scale: Vec3, color: Vec3) -> u32 {
 	verts[i] = BasicVertex{p111, n, color, uv11, matrixIndex}; i += 1
 
 	// back
-	n = Vec3{0, 0, -1}
+	n = Vec3{0, 0, 1}
 	verts[i] = BasicVertex{p100, n, color, uv00, matrixIndex}; i += 1
 	verts[i] = BasicVertex{p110, n, color, uv01, matrixIndex}; i += 1
 	verts[i] = BasicVertex{p000, n, color, uv10, matrixIndex}; i += 1
@@ -144,7 +144,7 @@ create_cube :: proc(pos: Vec3, rot: Vec3, scale: Vec3, color: Vec3) -> u32 {
 	verts[i] = BasicVertex{p010, n, color, uv11, matrixIndex}; i += 1
 
 	// left
-	n = Vec3{-1, 0, 0}
+	n = Vec3{1, 0, 0}
 	verts[i] = BasicVertex{p000, n, color, uv00, matrixIndex}; i += 1
 	verts[i] = BasicVertex{p010, n, color, uv01, matrixIndex}; i += 1
 	verts[i] = BasicVertex{p001, n, color, uv10, matrixIndex}; i += 1
@@ -154,7 +154,7 @@ create_cube :: proc(pos: Vec3, rot: Vec3, scale: Vec3, color: Vec3) -> u32 {
 	verts[i] = BasicVertex{p011, n, color, uv11, matrixIndex}; i += 1
 
 	// right
-	n = Vec3{1, 0, 0}
+	n = Vec3{-1, 0, 0}
 	verts[i] = BasicVertex{p101, n, color, uv00, matrixIndex}; i += 1
 	verts[i] = BasicVertex{p111, n, color, uv01, matrixIndex}; i += 1
 	verts[i] = BasicVertex{p100, n, color, uv10, matrixIndex}; i += 1
@@ -188,7 +188,7 @@ create_cube :: proc(pos: Vec3, rot: Vec3, scale: Vec3, color: Vec3) -> u32 {
 	return matrixIndex
 }
 ugly_load_gltf :: proc(path: string) -> u32 { 	// todo: optimize this
-	matrixIndex: u32 = add_matrix({0, 0, 0}, {0, 0, 0}, {1, 1, 1})
+	matrixIndex: u32 = add_matrix({0, 0, 0}, {0, 0, 0}, {0.02, 0.02, 0.02})
 
 	pathCStr: cstring = strings.clone_to_cstring(path)
 
@@ -279,4 +279,40 @@ ugly_load_gltf :: proc(path: string) -> u32 { 	// todo: optimize this
 	add_vertices(&mainTrianangleleBuffer, verts)
 
 	return matrixIndex
+}
+
+debug_point :: proc(point: Vec3, color: Vec3 = {1, 0.7, 0.7}) {
+	radius: f32 = 0.05
+	divV: int = 2
+	divH: int = 3
+
+	tri_count := divH * divV * 2
+	verts := make([]BasicVertex, tri_count * 3)
+
+	idx := 0
+
+	for v := 0; v < divV; v += 1 {
+		for h := 0; h < divH; h += 1 {
+			p00, n00, uv00 := get_point_UV_shpere(h, v, divV, divH)
+			p10, n10, uv10 := get_point_UV_shpere(h + 1, v, divV, divH)
+			p01, n01, uv01 := get_point_UV_shpere(h, v + 1, divV, divH)
+			p11, n11, uv11 := get_point_UV_shpere(h + 1, v + 1, divV, divH)
+
+			p00 = p00 * radius + point
+			p10 = p10 * radius + point
+			p01 = p01 * radius + point
+			p11 = p11 * radius + point
+
+			verts[idx + 0] = BasicVertex{p00, n00, color, uv00, 0}
+			verts[idx + 1] = BasicVertex{p01, n01, color, uv01, 0}
+			verts[idx + 2] = BasicVertex{p10, n10, color, uv10, 0}
+
+			verts[idx + 3] = BasicVertex{p10, n10, color, uv10, 0}
+			verts[idx + 4] = BasicVertex{p01, n01, color, uv01, 0}
+			verts[idx + 5] = BasicVertex{p11, n11, color, uv11, 0}
+
+			idx += 6
+		}
+	}
+	add_vertices(&debugDrawBuffer, verts[:])
 }
